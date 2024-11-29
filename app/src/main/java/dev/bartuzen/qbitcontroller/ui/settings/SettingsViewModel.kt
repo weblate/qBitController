@@ -9,7 +9,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val serverManager: ServerManager,
-    private val settingsManager: SettingsManager
+    private val settingsManager: SettingsManager,
 ) : ViewModel() {
     fun getServers() = serverManager.serversFlow.value
 
@@ -23,14 +23,6 @@ class SettingsViewModel @Inject constructor(
         get() = settingsManager.autoRefreshInterval.value
         set(value) {
             settingsManager.autoRefreshInterval.value = value
-        }
-
-    var autoRefreshIntervalFlow = settingsManager.autoRefreshInterval.flow
-
-    var autoRefreshHideLoadingBar
-        get() = settingsManager.autoRefreshHideLoadingBar.value
-        set(value) {
-            settingsManager.autoRefreshHideLoadingBar.value = value
         }
 
     var notificationCheckInterval

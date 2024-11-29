@@ -6,13 +6,13 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
-import android.text.TextUtils
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -23,8 +23,11 @@ import com.google.android.material.chip.Chip
 import dagger.hilt.android.AndroidEntryPoint
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.databinding.ActivityAddTorrentBinding
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getErrorMessage
-import dev.bartuzen.qbitcontroller.utils.getParcelableCompat
+import dev.bartuzen.qbitcontroller.utils.getParcelableArrayListCompat
+import dev.bartuzen.qbitcontroller.utils.getParcelableArrayListExtraCompat
+import dev.bartuzen.qbitcontroller.utils.getParcelableExtraCompat
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectIn
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
 import dev.bartuzen.qbitcontroller.utils.setTextWithoutAnimation
@@ -35,7 +38,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.google.android.material.R as materialR
 
 @AndroidEntryPoint
 class AddTorrentActivity : AppCompatActivity() {
@@ -54,13 +56,14 @@ class AddTorrentActivity : AppCompatActivity() {
 
     private val viewModel: AddTorrentViewModel by viewModels()
 
-    private val startFileActivity = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) {
-            torrentFileUri = uri
+    private val startFileActivity = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) {
+            torrentFileUris = uris
+            binding.textFileName.error = null
         }
     }
 
-    private var torrentFileUri: Uri? = null
+    private var torrentFileUris: List<Uri> = emptyList()
         set(value) {
             field = value
             updateFileName()
@@ -72,11 +75,14 @@ class AddTorrentActivity : AppCompatActivity() {
         binding = ActivityAddTorrentBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        torrentFileUri = savedInstanceState?.getParcelableCompat(Extras.FILE_URI)
+        enableEdgeToEdge()
+        binding.layoutAppBar.applySystemBarInsets(bottom = false)
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.scrollView.applySystemBarInsets(top = false)
 
-        val serverId = MutableStateFlow(
-            intent.getIntExtra(Extras.SERVER_ID, -1).takeIf { it != -1 }
-        )
+        torrentFileUris = savedInstanceState?.getParcelableArrayListCompat(Extras.FILE_URI) ?: emptyList()
+
+        val serverId = MutableStateFlow(intent.getIntExtra(Extras.SERVER_ID, -1).takeIf { it != -1 })
 
         if (serverId.value == null) {
             val servers = viewModel.getServers()
@@ -93,7 +99,7 @@ class AddTorrentActivity : AppCompatActivity() {
                 binding.spinnerServers.adapter = ArrayAdapter(
                     this,
                     android.R.layout.simple_spinner_dropdown_item,
-                    servers.map { server -> server.name ?: server.visibleUrl }
+                    servers.map { server -> server.name ?: server.visibleUrl },
                 )
                 binding.spinnerServers.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
                     override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -107,23 +113,50 @@ class AddTorrentActivity : AppCompatActivity() {
         }
 
         val torrentUrl = intent.getStringExtra(Extras.TORRENT_URL)
-        val uri = intent.data
 
         if (torrentUrl != null) {
             binding.inputLayoutTorrentLink.setTextWithoutAnimation(torrentUrl)
-        } else if (uri != null) {
-            when (uri.scheme) {
-                "http", "https", "magnet" -> {
-                    binding.inputLayoutTorrentLink.setTextWithoutAnimation(uri.toString())
+        } else {
+            when (intent.action) {
+                Intent.ACTION_VIEW -> intent.data?.let { uri ->
+                    when (uri.scheme) {
+                        "magnet" -> {
+                            binding.inputLayoutTorrentLink.setTextWithoutAnimation(uri.toString())
+                        }
+                        "content" -> {
+                            torrentFileUris = listOf(uri)
+                            binding.toggleButtonMode.check(R.id.button_file)
+                            binding.inputLayoutTorrentLink.visibility = View.GONE
+                            binding.textFileName.visibility = View.VISIBLE
+                        }
+                    }
                 }
-                "content", "file" -> {
-                    torrentFileUri = uri
-                    viewModel.setUrlMode(false)
+                Intent.ACTION_SEND -> {
+                    when (intent.type) {
+                        "text/plain" -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { text ->
+                            binding.inputLayoutTorrentLink.setTextWithoutAnimation(text)
+                        }
+                        "application/x-bittorrent" -> intent.getParcelableExtraCompat<Uri>(Intent.EXTRA_STREAM)?.let { uri ->
+                            torrentFileUris = listOf(uri)
+                            binding.toggleButtonMode.check(R.id.button_file)
+                            binding.inputLayoutTorrentLink.visibility = View.GONE
+                            binding.textFileName.visibility = View.VISIBLE
+                        }
+                    }
+                }
+                Intent.ACTION_SEND_MULTIPLE -> {
+                    when (intent.type) {
+                        "application/x-bittorrent" -> intent.getParcelableArrayListExtraCompat<Uri>(
+                            Intent.EXTRA_STREAM,
+                        )?.let { uris ->
+                            torrentFileUris = uris
+                            binding.toggleButtonMode.check(R.id.button_file)
+                            binding.inputLayoutTorrentLink.visibility = View.GONE
+                            binding.textFileName.visibility = View.VISIBLE
+                        }
+                    }
                 }
             }
-        } else if (intent.hasExtra(Intent.EXTRA_TEXT)) {
-            val text = intent.getStringExtra(Intent.EXTRA_TEXT)
-            binding.inputLayoutTorrentLink.setTextWithoutAnimation(text)
         }
 
         setSupportActionBar(binding.toolbar)
@@ -157,21 +190,15 @@ class AddTorrentActivity : AppCompatActivity() {
             }
         })
 
-        viewModel.isUrlMode.launchAndCollectLatestIn(this) { isUrlMode ->
-            if (isUrlMode) {
-                @Suppress("PrivateResource")
-                binding.buttonFile.setChipBackgroundColorResource(materialR.color.mtrl_chip_background_color)
-                binding.buttonUrl.setChipBackgroundColorResource(R.color.color_primary)
-
-                binding.inputLayoutTorrentLink.visibility = View.VISIBLE
-                binding.textFileName.visibility = View.GONE
-            } else {
-                @Suppress("PrivateResource")
-                binding.buttonUrl.setChipBackgroundColorResource(materialR.color.mtrl_chip_background_color)
-                binding.buttonFile.setChipBackgroundColorResource(R.color.color_primary)
-
-                binding.inputLayoutTorrentLink.visibility = View.GONE
-                binding.textFileName.visibility = View.VISIBLE
+        binding.toggleButtonMode.addOnButtonCheckedListener { _, checkedId, isChecked ->
+            if (isChecked) {
+                if (checkedId == R.id.button_url) {
+                    binding.inputLayoutTorrentLink.visibility = View.VISIBLE
+                    binding.textFileName.visibility = View.GONE
+                } else if (checkedId == R.id.button_file) {
+                    binding.inputLayoutTorrentLink.visibility = View.GONE
+                    binding.textFileName.visibility = View.VISIBLE
+                }
             }
         }
 
@@ -179,30 +206,22 @@ class AddTorrentActivity : AppCompatActivity() {
             startFileActivity.launch(arrayOf("application/x-bittorrent"))
         }
 
-        binding.buttonUrl.setOnClickListener {
-            viewModel.setUrlMode(true)
-        }
-
-        binding.buttonFile.setOnClickListener {
-            viewModel.setUrlMode(false)
-        }
-
         binding.editTorrentLink.addTextChangedListener(
             onTextChanged = { text, _, _, _ ->
                 if (binding.inputLayoutTorrentLink.isErrorEnabled && text?.isNotBlank() == true) {
                     binding.inputLayoutTorrentLink.isErrorEnabled = false
                 }
-            }
+            },
         )
 
         binding.dropdownDlspeedLimitUnit.setItems(
             R.string.speed_kibibytes_per_second,
-            R.string.speed_mebibytes_per_second
+            R.string.speed_mebibytes_per_second,
         )
 
         binding.dropdownUpspeedLimitUnit.setItems(
             R.string.speed_kibibytes_per_second,
-            R.string.speed_mebibytes_per_second
+            R.string.speed_mebibytes_per_second,
         )
 
         binding.swipeRefresh.setOnRefreshListener {
@@ -219,8 +238,13 @@ class AddTorrentActivity : AppCompatActivity() {
             viewModel.loadCategoryAndTags(id)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isCreating.launchAndCollectLatestIn(this) { isCreating ->
-            binding.progressIndicator.visibility = if (isCreating) View.VISIBLE else View.GONE
+            if (isCreating) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.isLoading.launchAndCollectLatestIn(this) { isLoading ->
@@ -249,12 +273,9 @@ class AddTorrentActivity : AppCompatActivity() {
             binding.chipGroupCategory.removeAllViews()
 
             categoryList.forEach { category ->
-                val chip = Chip(this@AddTorrentActivity)
+                val chip = layoutInflater.inflate(R.layout.chip_category, binding.chipGroupCategory, false) as Chip
                 chip.text = category
-                chip.setEnsureMinTouchTargetSize(false)
-                chip.setChipBackgroundColorResource(R.color.torrent_category)
-                chip.ellipsize = TextUtils.TruncateAt.END
-                chip.isCheckable = true
+                chip.isClickable = true
 
                 if (category == selectedCategory) {
                     chip.isChecked = true
@@ -284,12 +305,9 @@ class AddTorrentActivity : AppCompatActivity() {
             binding.chipGroupTag.removeAllViews()
 
             tagList.forEach { tag ->
-                val chip = Chip(this@AddTorrentActivity)
+                val chip = layoutInflater.inflate(R.layout.chip_tag, binding.chipGroupTag, false) as Chip
                 chip.text = tag
-                chip.setEnsureMinTouchTargetSize(false)
-                chip.setChipBackgroundColorResource(R.color.torrent_tag)
-                chip.isCheckable = true
-                chip.ellipsize = TextUtils.TruncateAt.END
+                chip.isClickable = true
 
                 if (selectedTags.contains(tag)) {
                     chip.isChecked = true
@@ -316,7 +334,7 @@ class AddTorrentActivity : AppCompatActivity() {
         binding.dropdownAutoTmm.setItems(
             R.string.torrent_add_default,
             R.string.torrent_add_torrent_management_mode_manual,
-            R.string.torrent_add_torrent_management_mode_auto
+            R.string.torrent_add_torrent_management_mode_auto,
         )
         binding.dropdownAutoTmm.onItemChangeListener = { position ->
             binding.inputLayoutSavePath.isEnabled = position != 2
@@ -326,14 +344,14 @@ class AddTorrentActivity : AppCompatActivity() {
             R.string.torrent_add_default,
             R.string.torrent_add_stop_condition_none,
             R.string.torrent_add_stop_condition_metadata_received,
-            R.string.torrent_add_stop_condition_files_checked
+            R.string.torrent_add_stop_condition_files_checked,
         )
 
         binding.dropdownContentLayout.setItems(
             R.string.torrent_add_default,
             R.string.torrent_add_content_layout_original,
             R.string.torrent_add_content_layout_subfolder,
-            R.string.torrent_add_content_layout_no_subfolder
+            R.string.torrent_add_content_layout_no_subfolder,
         )
 
         viewModel.eventFlow.launchAndCollectIn(this) { event ->
@@ -343,6 +361,9 @@ class AddTorrentActivity : AppCompatActivity() {
                 }
                 AddTorrentViewModel.Event.FileNotFound -> {
                     showSnackbar(R.string.torrent_add_file_not_found, view = binding.layoutCoordinator)
+                }
+                is AddTorrentViewModel.Event.FileReadError -> {
+                    showSnackbar(getString(R.string.error_unknown, event.error))
                 }
                 AddTorrentViewModel.Event.TorrentAddError -> {
                     showSnackbar(R.string.torrent_add_error, view = binding.layoutCoordinator)
@@ -367,7 +388,7 @@ class AddTorrentActivity : AppCompatActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putParcelable(Extras.FILE_URI, torrentFileUri)
+        outState.putParcelableArrayList(Extras.FILE_URI, ArrayList(torrentFileUris))
         outState.putString(Extras.SELECTED_CATEGORY, getSelectedCategory())
         outState.putStringArrayList(Extras.SELECTED_TAGS, ArrayList(getSelectedTags()))
     }
@@ -385,24 +406,34 @@ class AddTorrentActivity : AppCompatActivity() {
     }
 
     private fun updateFileName() {
-        val uri = torrentFileUri
+        val uris = torrentFileUris
 
-        if (uri != null) {
-            lifecycleScope.launch {
-                val fileName = withContext(Dispatchers.IO) {
-                    val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME)
-                    contentResolver.query(uri, projection, null, null, null)?.use { metaCursor ->
-                        if (metaCursor.moveToFirst()) {
-                            metaCursor.getString(0)
-                        } else {
-                            null
+        when (uris.size) {
+            0 -> {
+                binding.textFileName.setText(R.string.torrent_add_click_to_select_file)
+            }
+            1 -> {
+                lifecycleScope.launch {
+                    val fileName = withContext(Dispatchers.IO) {
+                        val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME)
+                        contentResolver.query(uris.single(), projection, null, null, null)?.use { metaCursor ->
+                            if (metaCursor.moveToFirst()) {
+                                metaCursor.getString(0)
+                            } else {
+                                null
+                            }
                         }
                     }
+                    binding.textFileName.text = fileName
                 }
-                binding.textFileName.text = fileName
             }
-        } else {
-            binding.textFileName.setText(R.string.torrent_add_click_to_select_file)
+            else -> {
+                binding.textFileName.text = resources.getQuantityString(
+                    R.plurals.torrent_add_files_selected,
+                    uris.size,
+                    uris.size,
+                )
+            }
         }
     }
 
@@ -432,11 +463,10 @@ class AddTorrentActivity : AppCompatActivity() {
     }
 
     private fun tryAddTorrent(serverId: Int) {
-        val isUrlMode = viewModel.isUrlMode.value
+        val isUrlMode = binding.toggleButtonMode.checkedButtonId == R.id.button_url
         var isValid = true
 
         val links = binding.editTorrentLink.text.toString()
-        val torrentFileUri = torrentFileUri
 
         if (isUrlMode && links.isBlank()) {
             isValid = false
@@ -445,7 +475,7 @@ class AddTorrentActivity : AppCompatActivity() {
             binding.inputLayoutTorrentLink.isErrorEnabled = false
         }
 
-        if (!isUrlMode && torrentFileUri == null) {
+        if (!isUrlMode && torrentFileUris.isEmpty()) {
             isValid = false
             binding.textFileName.error = ""
         } else {
@@ -497,11 +527,18 @@ class AddTorrentActivity : AppCompatActivity() {
             else -> null
         }
 
+        val savePathText = binding.editSavePath.text.toString().ifBlank { null }
+        val savePath = when (autoTmm) {
+            null -> if (savePathText != viewModel.defaultSavePath.value) savePathText else null
+            true -> null
+            false -> savePathText
+        }
+
         viewModel.createTorrent(
             serverId = serverId,
             links = if (isUrlMode) links.split("\n") else null,
-            fileUri = if (!isUrlMode) torrentFileUri else null,
-            savePath = binding.editSavePath.text.toString().ifBlank { null },
+            fileUris = if (!isUrlMode) torrentFileUris else null,
+            savePath = savePath,
             category = category,
             tags = tags,
             stopCondition = stopCondition,
@@ -515,7 +552,7 @@ class AddTorrentActivity : AppCompatActivity() {
             skipHashChecking = binding.checkSkipChecking.isChecked,
             isAutoTorrentManagementEnabled = autoTmm,
             isSequentialDownloadEnabled = binding.checkSequentialDownload.isChecked,
-            isFirstLastPiecePrioritized = binding.checkPrioritizeFirstLastPiece.isChecked
+            isFirstLastPiecePrioritized = binding.checkPrioritizeFirstLastPiece.isChecked,
         )
     }
 }

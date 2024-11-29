@@ -15,7 +15,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class RssRulesViewModel @Inject constructor(
-    private val repository: RssRulesRepository
+    private val repository: RssRulesRepository,
 ) : ViewModel() {
     private val _rssRules = MutableStateFlow<Map<String, RssRule>?>(null)
     val rssRules = _rssRules.asStateFlow()
@@ -95,8 +95,8 @@ class RssRulesViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object RuleCreated : Event()
-        object RuleRenamed : Event()
-        object RuleDeleted : Event()
+        data object RuleCreated : Event()
+        data object RuleRenamed : Event()
+        data object RuleDeleted : Event()
     }
 }

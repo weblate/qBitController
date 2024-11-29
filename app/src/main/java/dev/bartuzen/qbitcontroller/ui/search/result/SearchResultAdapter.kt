@@ -9,16 +9,13 @@ import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.databinding.ItemSearchResultBinding
 import dev.bartuzen.qbitcontroller.model.Search
 import dev.bartuzen.qbitcontroller.utils.formatBytes
-import okhttp3.internal.Util.verifyAsIpAddress
-import okhttp3.internal.publicsuffix.PublicSuffixDatabase
-import java.net.URI
+import dev.bartuzen.qbitcontroller.utils.formatUri
 
 class SearchResultAdapter(
-    private val onClick: (searchResult: Search.Result) -> Unit
+    private val onClick: (searchResult: Search.Result) -> Unit,
 ) : ListAdapter<Search.Result, SearchResultAdapter.ViewHolder>(DiffCallback()) {
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = ViewHolder(
-        ItemSearchResultBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-    )
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+        ViewHolder(ItemSearchResultBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         getItem(position)?.let { result ->
@@ -48,28 +45,19 @@ class SearchResultAdapter(
                     formatBytes(context, result.fileSize)
                 } else {
                     "-"
-                }
+                },
             )
 
-            val site = try {
-                val host = URI.create(result.siteUrl).host ?: throw IllegalArgumentException()
-                if (verifyAsIpAddress(host)) {
-                    host
-                } else {
-                    PublicSuffixDatabase.get().getEffectiveTldPlusOne(host)
-                }
-            } catch (_: IllegalArgumentException) {
-                null
-            } ?: result.siteUrl
+            val site = formatUri(result.siteUrl)
             binding.textEngine.text = context.getString(R.string.search_result_site, site)
 
             binding.textSeeders.text = context.getString(
                 R.string.search_result_seeders,
-                result.seeders?.toString() ?: "-"
+                result.seeders?.toString() ?: "-",
             )
             binding.textLeechers.text = context.getString(
                 R.string.search_result_leechers,
-                result.leechers?.toString() ?: "-"
+                result.leechers?.toString() ?: "-",
             )
         }
     }
@@ -78,8 +66,10 @@ class SearchResultAdapter(
         override fun areItemsTheSame(oldItem: Search.Result, newItem: Search.Result) = oldItem.fileUrl == newItem.fileUrl
 
         override fun areContentsTheSame(oldItem: Search.Result, newItem: Search.Result) =
-            oldItem.fileName == newItem.fileName && oldItem.siteUrl == newItem.siteUrl &&
-                oldItem.fileSize == newItem.fileSize && oldItem.seeders == newItem.seeders &&
+            oldItem.fileName == newItem.fileName &&
+                oldItem.siteUrl == newItem.siteUrl &&
+                oldItem.fileSize == newItem.fileSize &&
+                oldItem.seeders == newItem.seeders &&
                 oldItem.leechers == newItem.leechers
     }
 }

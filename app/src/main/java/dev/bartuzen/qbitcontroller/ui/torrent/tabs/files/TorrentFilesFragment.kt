@@ -19,6 +19,7 @@ import dev.bartuzen.qbitcontroller.databinding.DialogRenameFileFolderBinding
 import dev.bartuzen.qbitcontroller.databinding.FragmentTorrentFilesBinding
 import dev.bartuzen.qbitcontroller.model.TorrentFileNode
 import dev.bartuzen.qbitcontroller.model.TorrentFilePriority
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getErrorMessage
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectIn
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
@@ -46,13 +47,16 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
     constructor(serverId: Int, torrentHash: String) : this() {
         arguments = bundleOf(
             "serverId" to serverId,
-            "torrentHash" to torrentHash
+            "torrentHash" to torrentHash,
         )
     }
 
     private lateinit var onPageChange: ViewPager2.OnPageChangeCallback
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.recyclerFiles.applySystemBarInsets(top = false)
+
         var actionMode: ActionMode? = null
         val adapter = TorrentFilesAdapter().apply {
             onClick { file ->
@@ -76,7 +80,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                                     serverId = serverId,
                                     hash = torrentHash,
                                     files = getSelectedFiles(),
-                                    priority = TorrentFilePriority.DO_NOT_DOWNLOAD
+                                    priority = TorrentFilePriority.DO_NOT_DOWNLOAD,
                                 )
                                 finishSelection()
                                 actionMode?.finish()
@@ -86,7 +90,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                                     serverId = serverId,
                                     hash = torrentHash,
                                     files = getSelectedFiles(),
-                                    priority = TorrentFilePriority.NORMAL
+                                    priority = TorrentFilePriority.NORMAL,
                                 )
                                 finishSelection()
                                 actionMode?.finish()
@@ -96,7 +100,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                                     serverId = serverId,
                                     hash = torrentHash,
                                     files = getSelectedFiles(),
-                                    priority = TorrentFilePriority.HIGH
+                                    priority = TorrentFilePriority.HIGH,
                                 )
                                 finishSelection()
                                 actionMode?.finish()
@@ -106,22 +110,22 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                                     serverId = serverId,
                                     hash = torrentHash,
                                     files = getSelectedFiles(),
-                                    priority = TorrentFilePriority.MAXIMUM
+                                    priority = TorrentFilePriority.MAXIMUM,
                                 )
                                 finishSelection()
                                 actionMode?.finish()
                             }
                             R.id.menu_rename -> {
-                                val key = selectedItems.first()
+                                val key = selectedItems.firstOrNull() ?: return true
                                 val fileName = key.drop(1)
                                 val isFile = key.startsWith("1")
 
                                 val nodeStack = viewModel.nodeStack.value
-                                val separator = viewModel.torrentFiles.value?.separator ?: return false
+                                val separator = viewModel.torrentFiles.value?.separator ?: return true
 
                                 val root = if (nodeStack.isNotEmpty()) {
                                     val folderList = mutableListOf<String>()
-                                    for (folder in nodeStack.descendingIterator()) {
+                                    for (folder in nodeStack) {
                                         folderList.add(folder)
                                     }
                                     folderList.joinToString(separator) + separator
@@ -135,7 +139,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                                     onSuccess = {
                                         finishSelection()
                                         actionMode?.finish()
-                                    }
+                                    },
                                 )
                             }
                             R.id.menu_select_all -> {
@@ -164,7 +168,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                     actionMode?.title = resources.getQuantityString(
                         R.plurals.torrent_files_selected,
                         itemCount,
-                        itemCount
+                        itemCount,
                     )
                     actionMode?.menu?.findItem(R.id.menu_rename)?.isEnabled = itemCount == 1
                 }
@@ -173,7 +177,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
         val backButtonAdapter = TorrentFilesBackButtonAdapter(
             onClick = {
                 viewModel.goBack()
-            }
+            },
         )
         binding.recyclerFiles.adapter = ConcatAdapter(backButtonAdapter, adapter)
 
@@ -193,14 +197,13 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
             viewModel.loadFiles(serverId, torrentHash)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isNaturalLoading.launchAndCollectLatestIn(viewLifecycleOwner) { isNaturalLoading ->
-            val autoRefreshLoadingBar = viewModel.autoRefreshHideLoadingBar.value
-            binding.progressIndicator.visibility =
-                if (isNaturalLoading == true || isNaturalLoading == false && !autoRefreshLoadingBar) {
-                    View.VISIBLE
-                } else {
-                    View.GONE
-                }
+            if (isNaturalLoading == true) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.isRefreshing.launchAndCollectLatestIn(viewLifecycleOwner) { isRefreshing ->
@@ -216,12 +219,12 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
         }.filterNotNull().launchAndCollectLatestIn(viewLifecycleOwner) { (nodeStack, torrentFiles) ->
             val fileList = torrentFiles.findChildNode(nodeStack)?.children?.sortedWith(
                 compareBy<TorrentFileNode> { it.isFile }
-                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name },
             )
             if (fileList != null) {
                 adapter.submitList(fileList) {
                     if (nodeStack.isNotEmpty()) {
-                        backButtonAdapter.currentDirectory = nodeStack.reversed().joinToString(torrentFiles.separator)
+                        backButtonAdapter.currentDirectory = nodeStack.joinToString(torrentFiles.separator)
                     } else {
                         backButtonAdapter.currentDirectory = null
                     }
@@ -277,7 +280,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                     R.string.torrent_files_rename_file_hint
                 } else {
                     R.string.torrent_files_rename_folder_hint
-                }
+                },
             )
 
             setTitle(
@@ -285,7 +288,7 @@ class TorrentFilesFragment() : Fragment(R.layout.fragment_torrent_files) {
                     R.string.torrent_files_rename_file
                 } else {
                     R.string.torrent_files_rename_folder
-                }
+                },
             )
             setPositiveButton { _, _ ->
                 val newName = binding.editName.text.toString()

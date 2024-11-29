@@ -1,6 +1,8 @@
 @file:Suppress("UnstableApiUsage")
 
+import android.databinding.tool.ext.joinToCamelCaseAsVar
 import java.io.FileInputStream
+import java.util.Locale
 import java.util.Properties
 
 plugins {
@@ -8,27 +10,33 @@ plugins {
     alias(libs.plugins.kotlinAndroid)
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.hilt)
-    alias(libs.plugins.kapt)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlinxSerialization)
     alias(libs.plugins.kotlinter)
+    alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.baselineprofile)
 
     id("dev.bartuzen.qbitcontroller.localesconfig")
 }
 
 android {
     namespace = "dev.bartuzen.qbitcontroller"
-    compileSdk = 33
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "dev.bartuzen.qbitcontroller"
         minSdk = 21
-        targetSdk = 33
-        versionCode = 13
-        versionName = "0.8.0"
+        targetSdk = 35
+        versionCode = 20
+        versionName = "1.1.0"
+
+        buildConfigField("String", "SOURCE_CODE_URL", "\"https://github.com/Bartuzen/qBitController\"")
     }
 
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            isDefault = true
         }
 
         release {
@@ -48,6 +56,7 @@ android {
     productFlavors {
         create("free") {
             dimension = "firebase"
+            isDefault = true
         }
         create("firebase") {
             dimension = "firebase"
@@ -63,13 +72,16 @@ android {
                 keystoreProperties.load(FileInputStream(keystorePropertiesFile))
             }
 
-            fun getProperty(propertyName: String, envName: String) =
-                keystoreProperties.getProperty(propertyName) ?: System.getenv("QBITCONTROLLER_$envName")
+            fun getProperty(vararg name: String): String? {
+                val propertyName = name.toList().joinToCamelCaseAsVar()
+                val envName = "QBITCONTROLLER_" + name.joinToString("_").uppercase(Locale.US)
+                return keystoreProperties.getProperty(propertyName) ?: System.getenv(envName)
+            }
 
-            storeFile = getProperty("storeFile", "STORE_FILE")?.let { file(it) }
-            storePassword = getProperty("storePassword", "STORE_PASSWORD")
-            keyAlias = getProperty("keyAlias", "KEY_ALIAS")
-            keyPassword = getProperty("keyPassword", "KEY_PASSWORD")
+            storeFile = getProperty("store", "file")?.let { file(it) }
+            storePassword = getProperty("store", "password")
+            keyAlias = getProperty("key", "alias")
+            keyPassword = getProperty("key", "password")
         }
     }
 
@@ -86,15 +98,13 @@ android {
 
     buildFeatures {
         viewBinding = true
+        buildConfig = true
+        compose = true
     }
 
     lint {
-        disable += "MissingTranslation"
+        disable += listOf("MissingTranslation", "ExtraTranslation")
     }
-}
-
-kapt {
-    correctErrorTypes = true
 }
 
 val isFirebaseEnabled = gradle.startParameter.taskRequests.any { task ->
@@ -119,27 +129,47 @@ dependencies {
 
     implementation(libs.material)
 
-    debugImplementation(libs.leakCanary)
+    api(platform(libs.compose.bom))
+    implementation(libs.compose.material3)
+    debugImplementation(libs.compose.ui.tooling)
+    implementation(libs.compose.ui.toolingPreview)
+
+    implementation(libs.androidx.profileinstaller)
+    baselineProfile(project(":baselineProfile"))
+
+    implementation(libs.compose.materialIcons.core)
+    implementation(libs.compose.materialIcons.extended)
+    
+    implementation(libs.compose.navigation)
+
+    implementation(libs.compose.hilt)
+
+    implementation(libs.accompanist.permissions)
 
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
 
+    implementation(libs.kotlinxSerialization)
+
     implementation(libs.work.runtime)
     implementation(libs.work.hilt.core)
-    kapt(libs.work.hilt.compiler)
+    ksp(libs.work.hilt.compiler)
 
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)
 
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.scalars)
-    implementation(libs.retrofit.converter.jackson)
+    implementation(libs.retrofit.converter.kotlinxSerialization)
 
-    implementation(libs.jackson.kotlin)
+    implementation(libs.okhttp.doh)
 
     implementation(libs.viewBindingPropertyDelegate.noReflection)
 
     coreLibraryDesugaring(libs.desugar)
+
+    implementation(libs.coil)
+    implementation(libs.coil.svg)
 
     val firebaseImplementation by configurations
     firebaseImplementation(platform(libs.firebase.bom))

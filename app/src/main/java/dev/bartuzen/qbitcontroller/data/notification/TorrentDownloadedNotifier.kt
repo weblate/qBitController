@@ -8,8 +8,6 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.data.ServerManager
@@ -17,15 +15,21 @@ import dev.bartuzen.qbitcontroller.model.Torrent
 import dev.bartuzen.qbitcontroller.model.TorrentState
 import dev.bartuzen.qbitcontroller.ui.main.MainActivity
 import dev.bartuzen.qbitcontroller.ui.torrent.TorrentActivity
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class TorrentDownloadedNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val serverManager: ServerManager
+    private val serverManager: ServerManager,
 ) {
-    private val mapper = jacksonObjectMapper()
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        explicitNulls = false
+    }
 
     private val sharedPref = context.getSharedPreferences("torrents", Context.MODE_PRIVATE)
 
@@ -35,7 +39,7 @@ class TorrentDownloadedNotifier @Inject constructor(
         TorrentState.PAUSED_UP,
         TorrentState.FORCED_UP,
         TorrentState.QUEUED_UP,
-        TorrentState.CHECKING_UP
+        TorrentState.CHECKING_UP,
     )
 
     private val downloadingStates = listOf(
@@ -47,7 +51,6 @@ class TorrentDownloadedNotifier @Inject constructor(
         TorrentState.FORCED_DL,
         TorrentState.PAUSED_DL,
         TorrentState.STALLED_DL,
-        TorrentState.ALLOCATING
     )
 
     private val notificationManager =
@@ -118,13 +121,13 @@ class TorrentDownloadedNotifier @Inject constructor(
             context,
             0,
             torrentIntent,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0,
         )
 
         val notification = NotificationCompat.Builder(context, "channel_server_${serverId}_downloaded")
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(torrent.name)
-            .setContentText(context.getString(R.string.notification_torrent_downloaded))
+            .setContentTitle(context.getString(R.string.notification_torrent_downloaded))
+            .setContentText(torrent.name)
             .setGroup("torrent_downloaded_$serverId")
             .setSortKey(torrent.name.lowercase())
             .setContentIntent(torrentPendingIntent)
@@ -146,13 +149,13 @@ class TorrentDownloadedNotifier @Inject constructor(
 
         val mainPendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            serverId,
             mainIntent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             } else {
                 PendingIntent.FLAG_UPDATE_CURRENT
-            }
+            },
         )
 
         val serverConfig = serverManager.getServer(serverId)
@@ -171,18 +174,23 @@ class TorrentDownloadedNotifier @Inject constructor(
     private fun areNotificationsEnabled() = NotificationManagerCompat.from(context).areNotificationsEnabled()
 
     private fun isNotificationChannelEnabled(name: String) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        notificationManager.getNotificationChannel(name).importance != NotificationManager.IMPORTANCE_NONE
+        val channel = notificationManager.getNotificationChannel(name)
+        if (channel != null) {
+            channel.importance != NotificationManager.IMPORTANCE_NONE
+        } else {
+            false
+        }
     } else {
         true
     }
 
     private fun getTorrents(serverId: Int): Map<String, TorrentState>? {
         val json = sharedPref.getString("server_$serverId", null)
-        return if (json != null) mapper.readValue(json) else null
+        return if (json != null) this.json.decodeFromString(json) else null
     }
 
     private fun setTorrents(serverId: Int, torrents: Map<String, TorrentState>) {
-        val json = mapper.writeValueAsString(torrents)
+        val json = json.encodeToString(torrents)
         sharedPref.edit {
             putString("server_$serverId", json)
         }

@@ -1,6 +1,5 @@
 package dev.bartuzen.qbitcontroller.ui.torrent.tabs.overview
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
@@ -29,12 +28,11 @@ import java.io.IOException
 import javax.inject.Inject
 
 @HiltViewModel
-@SuppressLint("StaticFieldLeak")
 class TorrentOverviewViewModel @Inject constructor(
     settingsManager: SettingsManager,
     @ApplicationContext private val context: Context,
     private val repository: TorrentOverviewRepository,
-    private val notifier: TorrentDownloadedNotifier
+    private val notifier: TorrentDownloadedNotifier,
 ) : ViewModel() {
     private val _torrent = MutableStateFlow<Torrent?>(null)
     val torrent = _torrent.asStateFlow()
@@ -54,7 +52,6 @@ class TorrentOverviewViewModel @Inject constructor(
     var isInitialLoadStarted = false
 
     val autoRefreshInterval = settingsManager.autoRefreshInterval.flow
-    val autoRefreshHideLoadingBar = settingsManager.autoRefreshHideLoadingBar.flow
 
     private fun updateTorrent(serverId: Int, torrentHash: String) = viewModelScope.launch {
         val torrentDeferred = async {
@@ -160,7 +157,8 @@ class TorrentOverviewViewModel @Inject constructor(
         uploadSpeedLimit: Int?,
         downloadSpeedLimit: Int?,
         ratioLimit: Double?,
-        seedingTimeLimit: Int?
+        seedingTimeLimit: Int?,
+        inactiveSeedingTimeLimit: Int?,
     ) = viewModelScope.launch {
         val requests = mutableListOf<suspend () -> RequestResult<Any>>()
 
@@ -185,8 +183,16 @@ class TorrentOverviewViewModel @Inject constructor(
         if (downloadSpeedLimit != null) {
             requests.add { repository.setDownloadSpeedLimit(serverId, torrentHash, downloadSpeedLimit) }
         }
-        if (ratioLimit != null && seedingTimeLimit != null) {
-            requests.add { repository.setShareLimit(serverId, torrentHash, ratioLimit, seedingTimeLimit) }
+        if (ratioLimit != null && seedingTimeLimit != null && inactiveSeedingTimeLimit != null) {
+            requests.add {
+                repository.setShareLimit(
+                    serverId,
+                    torrentHash,
+                    ratioLimit,
+                    seedingTimeLimit,
+                    inactiveSeedingTimeLimit,
+                )
+            }
         }
 
         if (requests.isEmpty()) {
@@ -196,32 +202,33 @@ class TorrentOverviewViewModel @Inject constructor(
         // setting download path when auto TMM is enabled has no effect, so we need to set auto TMM first
         val delayDownloadPathRequest = autoTmm != null && downloadPath != null
 
-        try {
-            requests.filterIndexed { index, _ ->
-                !delayDownloadPathRequest || index != -1
-            }.map { request ->
-                launch {
-                    val result = request()
-                    if (result is RequestResult.Error) {
-                        eventChannel.send(Event.Error(result))
-                        throw CancellationException()
-                    }
-                }
-            }.joinAll()
-            if (delayDownloadPathRequest) {
-                launch {
-                    val result = requests[1]()
-                    if (result is RequestResult.Error) {
-                        eventChannel.send(Event.Error(result))
-                        throw CancellationException()
-                    }
+        var isErrored = false
+
+        requests.filterIndexed { index, _ ->
+            !delayDownloadPathRequest || index != -1
+        }.map { request ->
+            launch {
+                val result = request()
+                if (result is RequestResult.Error) {
+                    isErrored = true
+                    eventChannel.send(Event.Error(result))
+                    throw CancellationException()
                 }
             }
-        } catch (_: CancellationException) {
-            return@launch
+        }.joinAll()
+        if (delayDownloadPathRequest && !isErrored) {
+            launch {
+                val result = requests[1]()
+                if (result is RequestResult.Error) {
+                    isErrored = true
+                    eventChannel.send(Event.Error(result))
+                }
+            }
         }
 
-        eventChannel.send(Event.OptionsUpdated)
+        if (!isErrored) {
+            eventChannel.send(Event.OptionsUpdated)
+        }
     }
 
     fun setForceStart(serverId: Int, torrentHash: String, value: Boolean) = viewModelScope.launch {
@@ -382,19 +389,19 @@ class TorrentOverviewViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object TorrentNotFound : Event()
-        object TorrentDeleted : Event()
-        object TorrentPaused : Event()
-        object TorrentResumed : Event()
-        object OptionsUpdated : Event()
-        object TorrentRechecked : Event()
-        object TorrentReannounced : Event()
-        object TorrentRenamed : Event()
+        data object TorrentNotFound : Event()
+        data object TorrentDeleted : Event()
+        data object TorrentPaused : Event()
+        data object TorrentResumed : Event()
+        data object OptionsUpdated : Event()
+        data object TorrentRechecked : Event()
+        data object TorrentReannounced : Event()
+        data object TorrentRenamed : Event()
         data class ForceStartChanged(val isEnabled: Boolean) : Event()
         data class SuperSeedingChanged(val isEnabled: Boolean) : Event()
-        object CategoryUpdated : Event()
-        object TagsUpdated : Event()
-        object TorrentExported : Event()
-        object TorrentExportError : Event()
+        data object CategoryUpdated : Event()
+        data object TagsUpdated : Event()
+        data object TorrentExported : Event()
+        data object TorrentExportError : Event()
     }
 }

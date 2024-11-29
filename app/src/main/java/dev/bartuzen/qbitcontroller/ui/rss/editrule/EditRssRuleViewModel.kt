@@ -3,12 +3,11 @@ package dev.bartuzen.qbitcontroller.ui.rss.editrule
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.bartuzen.qbitcontroller.data.repositories.rss.EditRssRuleRepository
 import dev.bartuzen.qbitcontroller.model.RssFeedNode
 import dev.bartuzen.qbitcontroller.model.RssRule
-import dev.bartuzen.qbitcontroller.model.deserializers.parseRssFeeds
+import dev.bartuzen.qbitcontroller.model.serializers.parseRssFeeds
 import dev.bartuzen.qbitcontroller.network.RequestResult
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
@@ -19,12 +18,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 @HiltViewModel
 class EditRssRuleViewModel @Inject constructor(
     private val repository: EditRssRuleRepository,
-    private val state: SavedStateHandle
+    private val state: SavedStateHandle,
 ) : ViewModel() {
     private val _rssRule = MutableStateFlow<RssRule?>(null)
     val rssRule = _rssRule.asStateFlow()
@@ -46,8 +47,7 @@ class EditRssRuleViewModel @Inject constructor(
     val isFetched = state.getStateFlow("isFetched", false)
 
     fun setRule(serverId: Int, name: String, rule: RssRule) = viewModelScope.launch {
-        val mapper = jacksonObjectMapper()
-        val json = mapper.writeValueAsString(rule)
+        val json = Json.encodeToString(rule)
 
         when (val result = repository.setRule(serverId, name, json)) {
             is RequestResult.Success -> {
@@ -160,7 +160,7 @@ class EditRssRuleViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object RuleUpdated : Event()
-        object RuleNotFound : Event()
+        data object RuleUpdated : Event()
+        data object RuleNotFound : Event()
     }
 }

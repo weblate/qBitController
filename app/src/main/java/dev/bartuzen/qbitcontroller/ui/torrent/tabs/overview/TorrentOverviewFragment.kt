@@ -3,7 +3,6 @@ package dev.bartuzen.qbitcontroller.ui.torrent.tabs.overview
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.text.TextUtils
 import android.view.Menu
 import android.view.MenuInflater
 import android.view.MenuItem
@@ -32,6 +31,7 @@ import dev.bartuzen.qbitcontroller.network.RequestResult
 import dev.bartuzen.qbitcontroller.ui.torrent.TorrentActivity
 import dev.bartuzen.qbitcontroller.ui.torrent.tabs.overview.category.TorrentCategoryDialog
 import dev.bartuzen.qbitcontroller.ui.torrent.tabs.overview.tags.TorrentTagsDialog
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.copyToClipboard
 import dev.bartuzen.qbitcontroller.utils.floorToDecimal
 import dev.bartuzen.qbitcontroller.utils.formatBytes
@@ -77,11 +77,14 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
     constructor(serverId: Int, torrentHash: String) : this() {
         arguments = bundleOf(
             "serverId" to serverId,
-            "torrentHash" to torrentHash
+            "torrentHash" to torrentHash,
         )
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.scrollView.applySystemBarInsets(top = false)
+
         requireActivity().addMenuProvider(
             object : MenuProvider {
                 override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -107,17 +110,21 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                         copyHashV1.isEnabled = torrent?.hashV1 != null
                         copyHashV2.isEnabled = torrent?.hashV2 != null
 
-                        reannounce.isEnabled = torrent != null && when (torrent.state) {
-                            TorrentState.PAUSED_UP, TorrentState.PAUSED_DL, TorrentState.QUEUED_UP, TorrentState.QUEUED_DL,
-                            TorrentState.ERROR, TorrentState.CHECKING_UP, TorrentState.CHECKING_DL -> false
+                        reannounce.isEnabled = torrent != null &&
+                            when (torrent.state) {
+                                TorrentState.PAUSED_UP, TorrentState.PAUSED_DL, TorrentState.QUEUED_UP,
+                                TorrentState.QUEUED_DL, TorrentState.ERROR, TorrentState.CHECKING_UP,
+                                TorrentState.CHECKING_DL,
+                                -> false
 
-                            else -> true
-                        }
+                                else -> true
+                            }
 
                         if (torrent != null) {
                             val isPaused = when (torrent.state) {
                                 TorrentState.PAUSED_DL, TorrentState.PAUSED_UP,
-                                TorrentState.MISSING_FILES, TorrentState.ERROR -> true
+                                TorrentState.MISSING_FILES, TorrentState.ERROR,
+                                -> true
 
                                 else -> false
                             }
@@ -156,7 +163,7 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                             showRenameTorrentDialog()
                         }
                         R.id.menu_recheck -> {
-                            viewModel.recheckTorrent(serverId, torrentHash)
+                            showRecheckDialog()
                         }
                         R.id.menu_reannounce -> {
                             viewModel.reannounceTorrent(serverId, torrentHash)
@@ -202,7 +209,7 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                     return true
                 }
             },
-            viewLifecycleOwner
+            viewLifecycleOwner,
         )
 
         binding.swipeRefresh.setOnRefreshListener {
@@ -214,14 +221,13 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
             viewModel.loadTorrent(serverId, torrentHash)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.INVISIBLE)
         viewModel.isNaturalLoading.launchAndCollectLatestIn(viewLifecycleOwner) { isNaturalLoading ->
-            val autoRefreshLoadingBar = viewModel.autoRefreshHideLoadingBar.value
-            binding.progressIndicator.visibility =
-                if (isNaturalLoading == true || isNaturalLoading == false && !autoRefreshLoadingBar) {
-                    View.VISIBLE
-                } else {
-                    View.INVISIBLE
-                }
+            if (isNaturalLoading == true) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.isRefreshing.launchAndCollectLatestIn(viewLifecycleOwner) { isRefreshing ->
@@ -256,20 +262,16 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
             binding.chipGroupCategoryAndTag.removeAllViews()
 
             if (torrent.category != null) {
-                val chip = Chip(context)
+                val chip = layoutInflater.inflate(R.layout.chip_category, binding.chipGroupCategoryAndTag, false) as Chip
                 chip.text = torrent.category
-                chip.setEnsureMinTouchTargetSize(false)
-                chip.setChipBackgroundColorResource(R.color.torrent_category)
-                chip.ellipsize = TextUtils.TruncateAt.END
+                chip.isFocusable = false
                 binding.chipGroupCategoryAndTag.addView(chip)
             }
 
             torrent.tags.forEach { tag ->
-                val chip = Chip(context)
+                val chip = layoutInflater.inflate(R.layout.chip_tag, binding.chipGroupCategoryAndTag, false) as Chip
                 chip.text = tag
-                chip.setEnsureMinTouchTargetSize(false)
-                chip.setChipBackgroundColorResource(R.color.torrent_tag)
-                chip.ellipsize = TextUtils.TruncateAt.END
+                chip.isFocusable = false
                 binding.chipGroupCategoryAndTag.addView(chip)
             }
 
@@ -306,15 +308,11 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                 formatBytes(requireContext(), torrent.completed),
                 formatBytes(requireContext(), torrent.size),
                 progressText,
-                torrent.ratio.floorToDecimal(2).toString()
+                torrent.ratio.floorToDecimal(2).toString(),
             )
 
             binding.textEta.text = torrent.eta?.let { eta ->
-                if (eta < 8640000) {
-                    formatSeconds(requireContext(), eta)
-                } else {
-                    null
-                }
+                formatSeconds(requireContext(), eta)
             }
 
             binding.textState.text = formatTorrentState(requireContext(), torrent.state)
@@ -334,6 +332,15 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                 "-"
             }
             binding.textAddedOn.text = formatDate(properties.additionDate)
+
+            binding.textPrivateTitle.visibility = if (torrent.isPrivate == null) View.GONE else View.VISIBLE
+            binding.textPrivate.visibility = if (torrent.isPrivate == null) View.GONE else View.VISIBLE
+            binding.textPrivate.text = when (torrent.isPrivate) {
+                true -> getString(R.string.torrent_overview_private_yes)
+                false -> getString(R.string.torrent_overview_private_no)
+                null -> null
+            }
+
             binding.textHashV1.text = torrent.hashV1 ?: "-"
             binding.textHashV2.text = torrent.hashV2 ?: "-"
             binding.textSavePath.text = properties.savePath
@@ -343,7 +350,7 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                     R.string.torrent_overview_pieces_format,
                     properties.piecesCount,
                     formatBytes(requireContext(), properties.pieceSize),
-                    properties.piecesHave
+                    properties.piecesHave,
                 )
             } else {
                 "-"
@@ -364,7 +371,7 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                 getString(
                     R.string.torrent_overview_time_active_seeding_time_format,
                     formatSeconds(requireContext(), torrent.timeActive),
-                    formatSeconds(requireContext(), torrent.seedingTime)
+                    formatSeconds(requireContext(), torrent.seedingTime),
                 )
             } else {
                 formatSeconds(requireContext(), torrent.timeActive)
@@ -372,12 +379,12 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
             binding.textDownloaded.text = getString(
                 R.string.torrent_overview_downloaded_format,
                 formatBytes(requireContext(), torrent.downloaded),
-                formatBytes(requireContext(), torrent.downloadedSession)
+                formatBytes(requireContext(), torrent.downloadedSession),
             )
             binding.textUploaded.text = getString(
                 R.string.torrent_overview_uploaded_format,
                 formatBytes(requireContext(), torrent.uploaded),
-                formatBytes(requireContext(), torrent.uploadedSession)
+                formatBytes(requireContext(), torrent.uploadedSession),
             )
             binding.textReannounceIn.text = formatSeconds(requireContext(), properties.nextReannounce)
             binding.textLastActivity.text = formatDate(torrent.lastActivity)
@@ -389,17 +396,17 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
             binding.textConnections.text = getString(
                 R.string.torrent_overview_connections_format,
                 properties.connections,
-                properties.connectionsLimit
+                properties.connectionsLimit,
             )
             binding.textSeeds.text = getString(
                 R.string.torrent_overview_seeds_format,
                 properties.seeds,
-                properties.seedsTotal
+                properties.seedsTotal,
             )
             binding.textPeers.text = getString(
                 R.string.torrent_overview_peers_format,
                 properties.peers,
-                properties.peersTotal
+                properties.peersTotal,
             )
             binding.textWasted.text = formatBytes(requireContext(), properties.wasted)
         }
@@ -472,7 +479,7 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                         } else {
                             R.string.torrent_disable_force_start_success
                         },
-                        view = requireActivity().view
+                        view = requireActivity().view,
                     )
 
                     viewLifecycleOwner.lifecycleScope.launch {
@@ -487,7 +494,7 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                         } else {
                             R.string.torrent_disable_super_seeding_success
                         },
-                        view = requireActivity().view
+                        view = requireActivity().view,
                     )
 
                     viewLifecycleOwner.lifecycleScope.launch {
@@ -541,13 +548,15 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                     binding.radioLimitGlobal.isChecked = true
 
                     binding.inputLayoutRatio.isEnabled = false
-                    binding.inputLayoutTime.isEnabled = false
+                    binding.inputLayoutTotalMinutes.isEnabled = false
+                    binding.inputLayoutInactiveMinutes.isEnabled = false
                 }
                 torrent.seedingTimeLimit == -1 && torrent.ratioLimit == -1.0 -> {
                     binding.radioLimitDisable.isChecked = true
 
                     binding.inputLayoutRatio.isEnabled = false
-                    binding.inputLayoutTime.isEnabled = false
+                    binding.inputLayoutTotalMinutes.isEnabled = false
+                    binding.inputLayoutInactiveMinutes.isEnabled = false
                 }
                 else -> {
                     binding.radioLimitCustom.isChecked = true
@@ -556,7 +565,12 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                         binding.inputLayoutRatio.setTextWithoutAnimation(torrent.ratioLimit.toString())
                     }
                     if (torrent.seedingTimeLimit >= 0) {
-                        binding.inputLayoutTime.setTextWithoutAnimation(torrent.seedingTimeLimit.toString())
+                        binding.inputLayoutTotalMinutes.setTextWithoutAnimation(torrent.seedingTimeLimit.toString())
+                    }
+                    if (torrent.inactiveSeedingTimeLimit >= 0) {
+                        binding.inputLayoutInactiveMinutes.setTextWithoutAnimation(
+                            torrent.inactiveSeedingTimeLimit.toString(),
+                        )
                     }
                 }
             }
@@ -576,7 +590,8 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
 
             binding.radioLimitCustom.setOnCheckedChangeListener { _, isChecked ->
                 binding.inputLayoutRatio.isEnabled = isChecked
-                binding.inputLayoutTime.isEnabled = isChecked
+                binding.inputLayoutTotalMinutes.isEnabled = isChecked
+                binding.inputLayoutInactiveMinutes.isEnabled = isChecked
             }
 
             setTitle(R.string.torrent_action_options)
@@ -622,35 +637,40 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                         null
                     }
                 }
-                val (ratioLimit, seedingTimeLimit) = when (binding.radioGroupLimit.checkedRadioButtonId) {
-                    R.id.radio_limit_global -> {
-                        -2.0 to -2
-                    }
-                    R.id.radio_limit_disable -> {
-                        -1.0 to -1
-                    }
-                    R.id.radio_limit_custom -> {
-                        val ratioLimit = binding.inputLayoutRatio.text.toDoubleOrNull() ?: -1.0
-                        val seedingTimeLimit = binding.inputLayoutTime.text.toIntOrNull() ?: -1
+                val (ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit) =
+                    when (binding.radioGroupLimit.checkedRadioButtonId) {
+                        R.id.radio_limit_global -> {
+                            Triple(-2.0, -2, -2)
+                        }
+                        R.id.radio_limit_disable -> {
+                            Triple(-1.0, -1, -1)
+                        }
+                        R.id.radio_limit_custom -> {
+                            val ratioLimit = binding.inputLayoutRatio.text.toDoubleOrNull() ?: -1.0
+                            val seedingTimeLimit = binding.inputLayoutTotalMinutes.text.toIntOrNull() ?: -1
+                            val inactiveSeedingTimeLimit = binding.inputLayoutInactiveMinutes.text.toIntOrNull() ?: -1
 
-                        if (ratioLimit != -1.0 || seedingTimeLimit != -1) {
-                            ratioLimit to seedingTimeLimit
+                            if (ratioLimit != -1.0 || seedingTimeLimit != -1 || inactiveSeedingTimeLimit != -1) {
+                                Triple(ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
+                            } else {
+                                Triple(null, null, null)
+                            }
+                        }
+                        else -> {
+                            Triple(null, null, null)
+                        }
+                    }.let { (ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit) ->
+                        if (ratioLimit == null || seedingTimeLimit == null || inactiveSeedingTimeLimit == null) {
+                            Triple(null, null, null)
+                        } else if (ratioLimit != torrent.ratioLimit ||
+                            seedingTimeLimit != torrent.seedingTimeLimit ||
+                            inactiveSeedingTimeLimit != torrent.inactiveSeedingTimeLimit
+                        ) {
+                            Triple(ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit)
                         } else {
-                            null to null
+                            Triple(null, null, null)
                         }
                     }
-                    else -> {
-                        null to null
-                    }
-                }.let { (ratioLimit, seedingTimeLimit) ->
-                    if (ratioLimit == null || seedingTimeLimit == null) {
-                        null to null
-                    } else if (ratioLimit != torrent.ratioLimit || seedingTimeLimit != torrent.seedingTimeLimit) {
-                        ratioLimit to seedingTimeLimit
-                    } else {
-                        null to null
-                    }
-                }
 
                 viewModel.setTorrentOptions(
                     serverId = serverId,
@@ -663,7 +683,8 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
                     uploadSpeedLimit = uploadSpeedLimit,
                     downloadSpeedLimit = downloadSpeedLimit,
                     ratioLimit = ratioLimit,
-                    seedingTimeLimit = seedingTimeLimit
+                    seedingTimeLimit = seedingTimeLimit,
+                    inactiveSeedingTimeLimit = inactiveSeedingTimeLimit,
                 )
             }
             setNegativeButton()
@@ -695,6 +716,17 @@ class TorrentOverviewFragment() : Fragment(R.layout.fragment_torrent_overview) {
             } else {
                 dialogBinding.inputLayoutName.error = getString(R.string.torrent_rename_name_cannot_be_blank)
             }
+        }
+    }
+
+    private fun showRecheckDialog() {
+        showDialog {
+            setTitle(R.string.torrent_action_force_recheck)
+            setMessage(R.string.torrent_force_recheck_confirm)
+            setPositiveButton { _, _ ->
+                viewModel.recheckTorrent(serverId, torrentHash)
+            }
+            setNegativeButton()
         }
     }
 

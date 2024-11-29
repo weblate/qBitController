@@ -20,7 +20,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TorrentPiecesViewModel @Inject constructor(
     settingsManager: SettingsManager,
-    private val repository: TorrentPiecesRepository
+    private val repository: TorrentPiecesRepository,
 ) : ViewModel() {
     private val _torrentPieces = MutableStateFlow<List<PieceState>?>(null)
     val torrentPieces = _torrentPieces.asStateFlow()
@@ -40,7 +40,6 @@ class TorrentPiecesViewModel @Inject constructor(
     var isInitialLoadStarted = false
 
     val autoRefreshInterval = settingsManager.autoRefreshInterval.flow
-    val autoRefreshHideLoadingBar = settingsManager.autoRefreshHideLoadingBar.flow
 
     private fun updatePieces(serverId: Int, torrentHash: String) = viewModelScope.launch {
         val piecesDeferred = async {
@@ -101,6 +100,6 @@ class TorrentPiecesViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object TorrentNotFound : Event()
+        data object TorrentNotFound : Event()
     }
 }

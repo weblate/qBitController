@@ -1,9 +1,11 @@
 package dev.bartuzen.qbitcontroller.model
 
-import com.fasterxml.jackson.annotation.JsonProperty
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
+@Serializable
 data class RssRule(
-    @JsonProperty("enabled") val isEnabled: Boolean,
+    @SerialName("enabled") val isEnabled: Boolean,
     val mustContain: String,
     val mustNotContain: String,
     val useRegex: Boolean,
@@ -14,5 +16,5 @@ data class RssRule(
     val savePath: String,
     val torrentContentLayout: String?,
     val smartFilter: Boolean,
-    val affectedFeeds: List<String>
+    val affectedFeeds: List<String>,
 )

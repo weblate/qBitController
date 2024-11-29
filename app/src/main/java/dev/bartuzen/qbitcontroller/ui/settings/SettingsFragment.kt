@@ -1,11 +1,17 @@
 package dev.bartuzen.qbitcontroller.ui.settings
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.text.InputType
+import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.os.LocaleListCompat
 import androidx.fragment.app.commit
 import androidx.fragment.app.setFragmentResultListener
 import androidx.fragment.app.viewModels
@@ -17,18 +23,27 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.data.Theme
 import dev.bartuzen.qbitcontroller.ui.settings.addeditserver.AddEditServerFragment
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getSerializableCompat
-import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
 import dev.bartuzen.qbitcontroller.utils.preferences
 import dev.bartuzen.qbitcontroller.utils.requireAppCompatActivity
 import dev.bartuzen.qbitcontroller.utils.setDefaultAnimations
 import dev.bartuzen.qbitcontroller.utils.showSnackbar
+import org.xmlpull.v1.XmlPullParser
+import java.util.Locale
 
 @AndroidEntryPoint
 class SettingsFragment : PreferenceFragmentCompat() {
     private val viewModel: SettingsViewModel by viewModels()
 
     private val permissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        listView.applySystemBarInsets(top = false)
+        listView.clipToPadding = false
+    }
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         preferenceManager.preferenceDataStore = object : PreferenceDataStore() {
@@ -38,6 +53,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
                     "autoRefreshInterval" -> viewModel.autoRefreshInterval.toString()
                     "notificationCheckInterval" -> viewModel.notificationCheckInterval.toString()
                     "theme" -> viewModel.theme.toString()
+                    "language" -> getLanguageCode(AppCompatDelegate.getApplicationLocales()[0])
                     else -> defValue
                 }
             }
@@ -63,8 +79,9 @@ class SettingsFragment : PreferenceFragmentCompat() {
                     "notificationCheckInterval" -> {
                         val num = value?.toIntOrNull() ?: return
                         viewModel.notificationCheckInterval = when {
+                            num == 0 -> 0
                             num > 24 * 60 -> 24 * 60
-                            num < 1 -> 1
+                            num < 15 -> 15
                             else -> num
                         }
                     }
@@ -73,12 +90,16 @@ class SettingsFragment : PreferenceFragmentCompat() {
                             viewModel.theme = Theme.valueOf(value)
                         }
                     }
+                    "language" -> {
+                        if (value != null) {
+                            AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(value))
+                        }
+                    }
                 }
             }
 
             override fun getBoolean(key: String, defValue: Boolean): Boolean {
                 return when (key) {
-                    "autoRefreshHideLoadingBar" -> viewModel.autoRefreshHideLoadingBar
                     "areTorrentSwipeActionsEnabled" -> viewModel.areTorrentSwipeActionsEnabled
                     else -> defValue
                 }
@@ -86,7 +107,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
 
             override fun putBoolean(key: String, value: Boolean) {
                 when (key) {
-                    "autoRefreshHideLoadingBar" -> viewModel.autoRefreshHideLoadingBar = value
                     "areTorrentSwipeActionsEnabled" -> viewModel.areTorrentSwipeActionsEnabled = value
                 }
             }
@@ -170,7 +190,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 resources.getQuantityString(
                     R.plurals.settings_connection_timeout_description,
                     viewModel.connectionTimeout,
-                    viewModel.connectionTimeout
+                    viewModel.connectionTimeout,
                 )
             }
 
@@ -194,7 +214,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
                     resources.getQuantityString(
                         R.plurals.settings_auto_refresh_interval_description,
                         viewModel.autoRefreshInterval,
-                        viewModel.autoRefreshInterval
+                        viewModel.autoRefreshInterval,
                     )
                 }
             }
@@ -207,16 +227,6 @@ class SettingsFragment : PreferenceFragmentCompat() {
             }
         }
 
-        switch {
-            key = "autoRefreshHideLoadingBar"
-            setTitle(R.string.settings_auto_refresh_hide_loading_bar)
-            setSummary(R.string.settings_auto_refresh_hide_loading_bar_description)
-
-            viewModel.autoRefreshIntervalFlow.launchAndCollectLatestIn(this@SettingsFragment) { autoRefreshInterval ->
-                isEnabled = autoRefreshInterval != 0
-            }
-        }
-
         editText {
             key = "notificationCheckInterval"
             setTitle(R.string.settings_notification_check_interval)
@@ -225,11 +235,16 @@ class SettingsFragment : PreferenceFragmentCompat() {
             isEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
 
             setSummaryProvider {
-                resources.getQuantityString(
-                    R.plurals.settings_notification_check_interval_description,
-                    viewModel.notificationCheckInterval,
-                    viewModel.notificationCheckInterval
-                )
+                val notificationCheckInterval = viewModel.notificationCheckInterval
+                if (notificationCheckInterval == 0) {
+                    getString(R.string.settings_disabled)
+                } else {
+                    resources.getQuantityString(
+                        R.plurals.settings_notification_check_interval_description,
+                        notificationCheckInterval,
+                        notificationCheckInterval,
+                    )
+                }
             }
 
             setOnBindEditTextListener { editText ->
@@ -252,7 +267,7 @@ class SettingsFragment : PreferenceFragmentCompat() {
             entries = arrayOf(
                 context.getString(R.string.settings_theme_light),
                 context.getString(R.string.settings_theme_dark),
-                context.getString(R.string.settings_theme_system_default)
+                context.getString(R.string.settings_theme_system_default),
             )
             entryValues = arrayOf("LIGHT", "DARK", "SYSTEM_DEFAULT")
 
@@ -260,6 +275,73 @@ class SettingsFragment : PreferenceFragmentCompat() {
                 entries[viewModel.theme.ordinal]
             }
         }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            preference {
+                key = "language"
+                setTitle(R.string.settings_language)
+                summary = getLanguageDisplayName(getLanguageCode(AppCompatDelegate.getApplicationLocales()[0]))
+
+                setOnPreferenceClickListener {
+                    val intent = Intent(Settings.ACTION_APP_LOCALE_SETTINGS).apply {
+                        data = Uri.fromParts("package", requireActivity().packageName, null)
+                    }
+                    startActivity(intent)
+                    true
+                }
+            }
+        } else {
+            list {
+                key = "language"
+                setTitle(R.string.settings_language)
+                setDialogTitle(R.string.settings_language)
+                summary = getLanguageDisplayName(getLanguageCode(AppCompatDelegate.getApplicationLocales()[0]))
+
+                val locales = getLocales()
+                entries = locales.values.toTypedArray()
+                entryValues = locales.keys.toTypedArray()
+            }
+        }
+    }
+
+    private fun getLocales(): Map<String, String> {
+        val languages = mutableListOf<Pair<String, String>>()
+        val parser = resources.getXml(R.xml.locales_config)
+
+        while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+            if (parser.eventType == XmlPullParser.START_TAG && parser.name == "locale") {
+                repeat(parser.attributeCount) { i ->
+                    val tag = parser.getAttributeValue(i)
+                    val displayName = getLanguageDisplayName(tag)
+
+                    languages.add(tag to displayName)
+                }
+            }
+
+            parser.next()
+        }
+
+        languages.sortBy { (_, displayName) -> displayName }
+        languages.add(0, "" to getString(R.string.settings_language_system_default))
+
+        return languages.toMap()
+    }
+
+    private fun getLanguageDisplayName(language: String?): String {
+        val locale = when (language) {
+            null, "" -> return getString(R.string.settings_theme_system_default)
+            "zh-CN" -> Locale.forLanguageTag("zh-Hans")
+            "zh-TW" -> Locale.forLanguageTag("zh-Hant")
+            else -> Locale.forLanguageTag(language)
+        }
+        return locale.getDisplayName(locale).replaceFirstChar { it.uppercase() }
+    }
+
+    private fun getLanguageCode(locale: Locale?): String {
+        if (locale == null) {
+            return ""
+        }
+        return locale.toString().replace("_", "-")
     }
 
     override fun onResume() {

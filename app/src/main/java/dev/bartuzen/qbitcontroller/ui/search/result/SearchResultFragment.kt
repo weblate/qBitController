@@ -30,6 +30,7 @@ import dev.bartuzen.qbitcontroller.databinding.DialogSearchFilterBinding
 import dev.bartuzen.qbitcontroller.databinding.FragmentSearchResultBinding
 import dev.bartuzen.qbitcontroller.model.Search
 import dev.bartuzen.qbitcontroller.ui.addtorrent.AddTorrentActivity
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getErrorMessage
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectIn
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
@@ -59,7 +60,7 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
             if (result.resultCode == Activity.RESULT_OK) {
                 val isAdded = result.data?.getBooleanExtra(
                     AddTorrentActivity.Extras.IS_ADDED,
-                    false
+                    false,
                 ) ?: false
                 if (isAdded) {
                     showSnackbar(R.string.torrent_add_success)
@@ -72,11 +73,14 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
             "serverId" to serverId,
             "searchQuery" to searchQuery,
             "category" to category,
-            "plugins" to plugins
+            "plugins" to plugins,
         )
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.recyclerTorrents.applySystemBarInsets(top = false)
+
         requireActivity().addMenuProvider(
             object : MenuProvider {
                 override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -95,6 +99,10 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
 
                     viewModel.isReverseSearchSorting.launchAndCollectLatestIn(viewLifecycleOwner) { isReverseSearchSort ->
                         menu.findItem(R.id.menu_sort_reverse)?.isChecked = isReverseSearchSort
+                    }
+
+                    viewModel.isSearchContinuing.launchAndCollectLatestIn(viewLifecycleOwner) { isSearchContinuing ->
+                        menu.findItem(R.id.menu_search_stop)?.isEnabled = isSearchContinuing
                     }
 
                     val searchItem = menu.findItem(R.id.menu_search)
@@ -160,7 +168,7 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
                 }
             },
             viewLifecycleOwner,
-            Lifecycle.State.RESUMED
+            Lifecycle.State.RESUMED,
         )
 
         if (savedInstanceState == null) {
@@ -170,7 +178,7 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
         val adapter = SearchResultAdapter(
             onClick = { searchResult ->
                 showSearchResultDialog(searchResult)
-            }
+            },
         )
         binding.recyclerTorrents.adapter = adapter
         binding.recyclerTorrents.addItemDecoration(object : RecyclerView.ItemDecoration() {
@@ -183,8 +191,13 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
             }
         })
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isSearchContinuing.launchAndCollectLatestIn(this) { isSearchContinuing ->
-            binding.progressIndicator.visibility = if (isSearchContinuing) View.VISIBLE else View.GONE
+            if (isSearchContinuing) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
             binding.swipeRefresh.isEnabled = !isSearchContinuing
         }
 
@@ -269,7 +282,7 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
                 R.string.size_gibibytes,
                 R.string.size_tebibytes,
                 R.string.size_pebibytes,
-                R.string.size_exbibytes
+                R.string.size_exbibytes,
             )
 
             binding.dropdownSizeMaxUnit.setItems(
@@ -279,7 +292,7 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
                 R.string.size_gibibytes,
                 R.string.size_tebibytes,
                 R.string.size_pebibytes,
-                R.string.size_exbibytes
+                R.string.size_exbibytes,
             )
 
             val filter = viewModel.filter.value
@@ -298,9 +311,12 @@ class SearchResultFragment() : Fragment(R.layout.fragment_search_result) {
                     sizeMin = binding.inputLayoutSizeMin.text.toLongOrNull(),
                     sizeMax = binding.inputLayoutSizeMax.text.toLongOrNull(),
                     sizeMinUnit = binding.dropdownSizeMinUnit.position,
-                    sizeMaxUnit = binding.dropdownSizeMaxUnit.position
+                    sizeMaxUnit = binding.dropdownSizeMaxUnit.position,
                 )
                 viewModel.setFilter(newFilter)
+            }
+            setNeutralButton(R.string.search_result_filter_reset) { _, _ ->
+                viewModel.resetFilter()
             }
             setNegativeButton()
         }

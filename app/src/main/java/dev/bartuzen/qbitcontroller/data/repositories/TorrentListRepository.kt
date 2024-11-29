@@ -1,12 +1,13 @@
 package dev.bartuzen.qbitcontroller.data.repositories
 
+import dev.bartuzen.qbitcontroller.model.QBittorrentVersion
 import dev.bartuzen.qbitcontroller.network.RequestManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class TorrentListRepository @Inject constructor(
-    private val requestManager: RequestManager
+    private val requestManager: RequestManager,
 ) {
     suspend fun getMainData(serverId: Int) = requestManager.request(serverId) { service ->
         service.getMainData()
@@ -18,11 +19,17 @@ class TorrentListRepository @Inject constructor(
         }
 
     suspend fun pauseTorrents(serverId: Int, hashes: List<String>) = requestManager.request(serverId) { service ->
-        service.pauseTorrents(hashes.joinToString("|"))
+        when (requestManager.getQBittorrentVersion(serverId)) {
+            QBittorrentVersion.V4 -> service.pauseTorrents(hashes.joinToString("|"))
+            QBittorrentVersion.V5 -> service.stopTorrents(hashes.joinToString("|"))
+        }
     }
 
     suspend fun resumeTorrents(serverId: Int, hashes: List<String>) = requestManager.request(serverId) { service ->
-        service.resumeTorrents(hashes.joinToString("|"))
+        when (requestManager.getQBittorrentVersion(serverId)) {
+            QBittorrentVersion.V4 -> service.resumeTorrents(hashes.joinToString("|"))
+            QBittorrentVersion.V5 -> service.startTorrents(hashes.joinToString("|"))
+        }
     }
 
     suspend fun deleteCategory(serverId: Int, category: String) = requestManager.request(serverId) { service ->
@@ -54,7 +61,7 @@ class TorrentListRepository @Inject constructor(
         name: String,
         savePath: String,
         downloadPathEnabled: Boolean?,
-        downloadPath: String
+        downloadPath: String,
     ) = requestManager.request(serverId) { service ->
         service.createCategory(name, savePath, downloadPathEnabled, downloadPath)
     }
@@ -69,7 +76,7 @@ class TorrentListRepository @Inject constructor(
         name: String,
         savePath: String,
         downloadPathEnabled: Boolean?,
-        downloadPath: String
+        downloadPath: String,
     ) = requestManager.request(serverId) { service ->
         service.editCategory(name, savePath, downloadPathEnabled, downloadPath)
     }
@@ -93,4 +100,9 @@ class TorrentListRepository @Inject constructor(
     suspend fun shutdown(serverId: Int) = requestManager.request(serverId) { service ->
         service.shutdown()
     }
+
+    suspend fun setCategory(serverId: Int, hashes: List<String>, category: String?) =
+        requestManager.request(serverId) { service ->
+            service.setCategory(hashes.joinToString("|"), category ?: "")
+        }
 }

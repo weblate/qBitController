@@ -1,9 +1,8 @@
 package dev.bartuzen.qbitcontroller.ui.addtorrent
 
-import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
-import androidx.lifecycle.SavedStateHandle
+import android.provider.MediaStore
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,12 +24,10 @@ import java.io.FileNotFoundException
 import javax.inject.Inject
 
 @HiltViewModel
-@SuppressLint("StaticFieldLeak")
 class AddTorrentViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val repository: AddTorrentRepository,
     private val serverManager: ServerManager,
-    private val state: SavedStateHandle
 ) : ViewModel() {
     private val eventChannel = Channel<Event>()
     val eventFlow = eventChannel.receiveAsFlow()
@@ -53,8 +50,6 @@ class AddTorrentViewModel @Inject constructor(
     private val _isCreating = MutableStateFlow(false)
     val isCreating = _isCreating.asStateFlow()
 
-    val isUrlMode = state.getStateFlow("isUrlMode", true)
-
     private var loadCategoryTagJob: Job? = null
 
     fun getServers() = serverManager.serversFlow.value.values.toList()
@@ -62,7 +57,7 @@ class AddTorrentViewModel @Inject constructor(
     fun createTorrent(
         serverId: Int,
         links: List<String>?,
-        fileUri: Uri?,
+        fileUris: List<Uri>?,
         savePath: String?,
         category: String?,
         tags: List<String>,
@@ -77,23 +72,40 @@ class AddTorrentViewModel @Inject constructor(
         skipHashChecking: Boolean,
         isAutoTorrentManagementEnabled: Boolean?,
         isSequentialDownloadEnabled: Boolean,
-        isFirstLastPiecePrioritized: Boolean
+        isFirstLastPiecePrioritized: Boolean,
     ) = viewModelScope.launch {
         if (!isCreating.value) {
             _isCreating.value = true
 
-            val fileBytes = try {
-                if (fileUri != null) {
+            val files = try {
+                fileUris?.mapNotNull {
                     withContext(Dispatchers.IO) {
-                        context.contentResolver.openInputStream(fileUri).use { stream ->
+                        val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME)
+                        val fileName = context.contentResolver.query(it, projection, null, null, null)?.use { metaCursor ->
+                            if (metaCursor.moveToFirst()) {
+                                metaCursor.getString(0)
+                            } else {
+                                null
+                            }
+                        }
+
+                        val content = context.contentResolver.openInputStream(it).use { stream ->
                             stream?.readBytes()
                         }
+
+                        if (fileName != null && content != null) {
+                            fileName to content
+                        } else {
+                            null
+                        }
                     }
-                } else {
-                    null
                 }
             } catch (_: FileNotFoundException) {
                 eventChannel.send(Event.FileNotFound)
+                _isCreating.value = false
+                return@launch
+            } catch (e: Exception) {
+                eventChannel.send(Event.FileReadError("${e::class.simpleName} ${e.message}"))
                 _isCreating.value = false
                 return@launch
             }
@@ -102,7 +114,7 @@ class AddTorrentViewModel @Inject constructor(
                 val result = repository.createTorrent(
                     serverId,
                     links,
-                    fileBytes,
+                    files,
                     savePath,
                     category,
                     tags,
@@ -117,7 +129,7 @@ class AddTorrentViewModel @Inject constructor(
                     skipHashChecking,
                     isAutoTorrentManagementEnabled,
                     isSequentialDownloadEnabled,
-                    isFirstLastPiecePrioritized
+                    isFirstLastPiecePrioritized,
                 )
             ) {
                 is RequestResult.Success -> {
@@ -146,7 +158,7 @@ class AddTorrentViewModel @Inject constructor(
                     result.data.values
                         .toList()
                         .map { it.name }
-                        .sortedBy { it }
+                        .sorted()
                 }
                 is RequestResult.Error -> {
                     eventChannel.send(Event.Error(result))
@@ -157,7 +169,7 @@ class AddTorrentViewModel @Inject constructor(
         val tagsDeferred = async {
             when (val result = repository.getTags(serverId)) {
                 is RequestResult.Success -> {
-                    result.data.sortedBy { it }
+                    result.data.sorted()
                 }
                 is RequestResult.Error -> {
                     eventChannel.send(Event.Error(result))
@@ -217,15 +229,12 @@ class AddTorrentViewModel @Inject constructor(
         }
     }
 
-    fun setUrlMode(isUrlMode: Boolean) {
-        state["isUrlMode"] = isUrlMode
-    }
-
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object FileNotFound : Event()
-        object InvalidTorrentFile : Event()
-        object TorrentAddError : Event()
-        object TorrentAdded : Event()
+        data object FileNotFound : Event()
+        data class FileReadError(val error: String) : Event()
+        data object InvalidTorrentFile : Event()
+        data object TorrentAddError : Event()
+        data object TorrentAdded : Event()
     }
 }

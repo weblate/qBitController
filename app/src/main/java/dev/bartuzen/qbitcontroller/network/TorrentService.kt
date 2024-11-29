@@ -31,6 +31,9 @@ interface TorrentService {
     @POST("api/v2/auth/login")
     suspend fun login(@Field("username") username: String, @Field("password") password: String): Response<String>
 
+    @GET("api/v2/app/version")
+    suspend fun getVersion(): Response<String>
+
     @GET("api/v2/app/defaultSavePath")
     suspend fun getDefaultSavePath(): Response<String>
 
@@ -73,6 +76,14 @@ interface TorrentService {
     suspend fun resumeTorrents(@Field("hashes") hashes: String): Response<String>
 
     @FormUrlEncoded
+    @POST("api/v2/torrents/stop")
+    suspend fun stopTorrents(@Field("hashes") hashes: String): Response<String>
+
+    @FormUrlEncoded
+    @POST("api/v2/torrents/start")
+    suspend fun startTorrents(@Field("hashes") hashes: String): Response<String>
+
+    @FormUrlEncoded
     @POST("api/v2/torrents/recheck")
     suspend fun recheckTorrents(@Field("hashes") hashes: String): Response<Unit>
 
@@ -105,7 +116,7 @@ interface TorrentService {
     suspend fun editTorrentTrackers(
         @Field("hash") hash: String,
         @Field("origUrl") tracker: String,
-        @Field("newUrl") newUrl: String
+        @Field("newUrl") newUrl: String,
     ): Response<Unit>
 
     @GET("api/v2/torrents/categories")
@@ -144,7 +155,7 @@ interface TorrentService {
         @Field("category") name: String,
         @Field("savePath") savePath: String,
         @Field("downloadPathEnabled") downloadPathEnabled: Boolean?,
-        @Field("downloadPath") downloadPath: String
+        @Field("downloadPath") downloadPath: String,
     ): Response<Unit>
 
     @FormUrlEncoded
@@ -153,7 +164,7 @@ interface TorrentService {
         @Field("category") name: String,
         @Field("savePath") savePath: String,
         @Field("downloadPathEnabled") downloadPathEnabled: Boolean?,
-        @Field("downloadPath") downloadPath: String
+        @Field("downloadPath") downloadPath: String,
     ): Response<Unit>
 
     @FormUrlEncoded
@@ -165,7 +176,8 @@ interface TorrentService {
     suspend fun setShareLimit(
         @Field("hashes") hashes: String,
         @Field("ratioLimit") ratioLimit: Double,
-        @Field("seedingTimeLimit") seedingTimeLimit: Int
+        @Field("seedingTimeLimit") seedingTimeLimit: Int,
+        @Field("inactiveSeedingTimeLimit") inactiveSeedingTimeLimit: Int,
     ): Response<Unit>
 
     @FormUrlEncoded
@@ -180,7 +192,7 @@ interface TorrentService {
     @POST("api/v2/torrents/add")
     suspend fun addTorrent(
         @Part("urls") links: String?,
-        @Part filePart: MultipartBody.Part?,
+        @Part fileParts: List<MultipartBody.Part>?,
         @Part("savepath") savePath: String?,
         @Part("category") category: String?,
         @Part("tags") tags: String?,
@@ -191,18 +203,17 @@ interface TorrentService {
         @Part("upLimit") uploadSpeedLimit: Int?,
         @Part("ratioLimit") ratioLimit: Double?,
         @Part("seedingTimeLimit") seedingTimeLimit: Int?,
-        @Part("paused") isPaused: Boolean,
         @Part("skip_checking") skipHashChecking: Boolean,
         @Part("autoTMM") isAutoTorrentManagementEnabled: Boolean?,
         @Part("sequentialDownload") isSequentialDownloadEnabled: Boolean,
-        @Part("firstLastPiecePrio") isFirstLastPiecePrioritized: Boolean
+        @Part("firstLastPiecePrio") isFirstLastPiecePrioritized: Boolean,
     ): Response<String>
 
     @FormUrlEncoded
     @POST("api/v2/torrents/setAutoManagement")
     suspend fun setAutomaticTorrentManagement(
         @Field("hashes") hashes: String,
-        @Field("enable") enable: Boolean
+        @Field("enable") enable: Boolean,
     ): Response<Unit>
 
     @FormUrlEncoded
@@ -238,7 +249,7 @@ interface TorrentService {
     suspend fun setFilePriority(
         @Field("hash") hash: String,
         @Field("id") id: String,
-        @Field("priority") priority: Int
+        @Field("priority") priority: Int,
     ): Response<Unit>
 
     @FormUrlEncoded
@@ -246,7 +257,7 @@ interface TorrentService {
     suspend fun renameFile(
         @Field("hash") hash: String,
         @Field("oldPath") oldPath: String,
-        @Field("newPath") newPath: String
+        @Field("newPath") newPath: String,
     ): Response<Unit>
 
     @FormUrlEncoded
@@ -254,7 +265,7 @@ interface TorrentService {
     suspend fun renameFolder(
         @Field("hash") hash: String,
         @Field("oldPath") oldPath: String,
-        @Field("newPath") newPath: String
+        @Field("newPath") newPath: String,
     ): Response<Unit>
 
     @FormUrlEncoded
@@ -331,7 +342,7 @@ interface TorrentService {
     suspend fun startSearch(
         @Field("pattern") pattern: String,
         @Field("category") category: String,
-        @Field("plugins") plugins: String
+        @Field("plugins") plugins: String,
     ): Response<StartSearch>
 
     @FormUrlEncoded

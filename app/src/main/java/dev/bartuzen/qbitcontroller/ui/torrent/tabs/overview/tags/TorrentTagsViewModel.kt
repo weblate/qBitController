@@ -14,7 +14,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TorrentTagsViewModel @Inject constructor(
-    private val repository: TorrentTagsRepository
+    private val repository: TorrentTagsRepository,
 ) : ViewModel() {
     private val eventChannel = Channel<Event>()
     val eventFlow = eventChannel.receiveAsFlow()
@@ -27,8 +27,7 @@ class TorrentTagsViewModel @Inject constructor(
     fun updateTags(serverId: Int) = viewModelScope.launch {
         when (val result = repository.getTags(serverId)) {
             is RequestResult.Success -> {
-                _tags.value = result.data
-                    .sortedBy { it }
+                _tags.value = result.data.sorted()
             }
             is RequestResult.Error -> {
                 eventChannel.send(Event.Error(result))

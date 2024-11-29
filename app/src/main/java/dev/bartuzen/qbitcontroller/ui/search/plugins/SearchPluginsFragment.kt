@@ -12,11 +12,14 @@ import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.LinearLayoutManager
 import by.kirich1409.viewbindingdelegate.viewBinding
+import com.google.android.material.divider.MaterialDividerItemDecoration
 import dagger.hilt.android.AndroidEntryPoint
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.databinding.DialogPluginInstallBinding
 import dev.bartuzen.qbitcontroller.databinding.FragmentSearchPluginsBinding
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getErrorMessage
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectIn
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
@@ -42,8 +45,16 @@ class SearchPluginsFragment() : Fragment(R.layout.fragment_search_plugins) {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.recyclerPlugins.applySystemBarInsets(top = false)
+
         val adapter = SearchPluginsAdapter()
         binding.recyclerPlugins.adapter = adapter
+        binding.recyclerPlugins.addItemDecoration(
+            MaterialDividerItemDecoration(requireContext(), LinearLayoutManager.VERTICAL).apply {
+                isLastItemDecorated = false
+            },
+        )
 
         requireActivity().addMenuProvider(
             object : MenuProvider {
@@ -68,7 +79,7 @@ class SearchPluginsFragment() : Fragment(R.layout.fragment_search_plugins) {
                 }
             },
             viewLifecycleOwner,
-            Lifecycle.State.RESUMED
+            Lifecycle.State.RESUMED,
         )
 
         if (!viewModel.isInitialLoadStarted) {
@@ -80,8 +91,13 @@ class SearchPluginsFragment() : Fragment(R.layout.fragment_search_plugins) {
             viewModel.refreshPlugins(serverId)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isLoading.launchAndCollectLatestIn(this) { isLoading ->
-            binding.progressIndicator.visibility = if (isLoading) View.VISIBLE else View.GONE
+            if (isLoading) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.isRefreshing.launchAndCollectLatestIn(this) { isRefreshing ->

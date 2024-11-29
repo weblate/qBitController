@@ -14,7 +14,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class TorrentCategoryViewModel @Inject constructor(
-    private val repository: TorrentCategoryRepository
+    private val repository: TorrentCategoryRepository,
 ) : ViewModel() {
     private val eventChannel = Channel<Event>()
     val eventFlow = eventChannel.receiveAsFlow()
@@ -30,7 +30,7 @@ class TorrentCategoryViewModel @Inject constructor(
                 _categories.value = result.data.values
                     .toList()
                     .map { it.name }
-                    .sortedBy { it }
+                    .sorted()
             }
             is RequestResult.Error -> {
                 eventChannel.send(Event.Error(result))

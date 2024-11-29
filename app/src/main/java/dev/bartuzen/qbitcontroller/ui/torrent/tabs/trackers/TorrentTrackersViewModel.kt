@@ -17,7 +17,7 @@ import javax.inject.Inject
 @HiltViewModel
 class TorrentTrackersViewModel @Inject constructor(
     settingsManager: SettingsManager,
-    private val repository: TorrentTrackersRepository
+    private val repository: TorrentTrackersRepository,
 ) : ViewModel() {
     private val _torrentTrackers = MutableStateFlow<List<TorrentTracker>?>(null)
     val torrentTrackers = _torrentTrackers.asStateFlow()
@@ -34,7 +34,6 @@ class TorrentTrackersViewModel @Inject constructor(
     var isInitialLoadStarted = false
 
     val autoRefreshInterval = settingsManager.autoRefreshInterval.flow
-    val autoRefreshHideLoadingBar = settingsManager.autoRefreshHideLoadingBar.flow
 
     private fun updateTrackers(serverId: Int, torrentHash: String) = viewModelScope.launch {
         when (val result = repository.getTrackers(serverId, torrentHash)) {
@@ -116,9 +115,9 @@ class TorrentTrackersViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object TorrentNotFound : Event()
-        object TrackersAdded : Event()
-        object TrackersDeleted : Event()
-        object TrackerEdited : Event()
+        data object TorrentNotFound : Event()
+        data object TrackersAdded : Event()
+        data object TrackersDeleted : Event()
+        data object TrackerEdited : Event()
     }
 }

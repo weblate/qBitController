@@ -18,6 +18,7 @@ import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.databinding.DialogRssAddRuleBinding
 import dev.bartuzen.qbitcontroller.databinding.FragmentRssRulesBinding
 import dev.bartuzen.qbitcontroller.ui.rss.editrule.EditRssRuleFragment
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getErrorMessage
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectIn
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
@@ -43,6 +44,9 @@ class RssRulesFragment() : Fragment(R.layout.fragment_rss_rules) {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.recyclerRules.applySystemBarInsets(top = false)
+
         requireActivity().addMenuProvider(
             object : MenuProvider {
                 override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -60,7 +64,7 @@ class RssRulesFragment() : Fragment(R.layout.fragment_rss_rules) {
                 }
             },
             viewLifecycleOwner,
-            Lifecycle.State.RESUMED
+            Lifecycle.State.RESUMED,
         )
 
         val adapter = RssRulesAdapter(
@@ -75,7 +79,7 @@ class RssRulesFragment() : Fragment(R.layout.fragment_rss_rules) {
             },
             onLongClick = { ruleName ->
                 showRuleLongClickDialog(ruleName)
-            }
+            },
         )
         binding.recyclerRules.adapter = adapter
 
@@ -88,8 +92,13 @@ class RssRulesFragment() : Fragment(R.layout.fragment_rss_rules) {
             viewModel.refreshRssRules(serverId)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isLoading.launchAndCollectLatestIn(viewLifecycleOwner) { isLoading ->
-            binding.progressIndicator.visibility = if (isLoading) View.VISIBLE else View.GONE
+            if (isLoading) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.isRefreshing.launchAndCollectLatestIn(viewLifecycleOwner) { isRefreshing ->
@@ -149,8 +158,8 @@ class RssRulesFragment() : Fragment(R.layout.fragment_rss_rules) {
             setItems(
                 arrayOf(
                     getString(R.string.rss_rule_rename),
-                    getString(R.string.rss_rule_delete)
-                )
+                    getString(R.string.rss_rule_delete),
+                ),
             ) { _, which ->
                 when (which) {
                     0 -> {

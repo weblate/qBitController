@@ -2,9 +2,9 @@ package dev.bartuzen.qbitcontroller.ui.settings.addeditserver
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.fasterxml.jackson.databind.JsonMappingException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.bartuzen.qbitcontroller.data.ServerManager
+import dev.bartuzen.qbitcontroller.model.Protocol
 import dev.bartuzen.qbitcontroller.model.ServerConfig
 import dev.bartuzen.qbitcontroller.network.BasicAuthInterceptor
 import dev.bartuzen.qbitcontroller.network.RequestResult
@@ -19,11 +19,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
+import okhttp3.dnsoverhttps.DnsOverHttps
 import retrofit2.Retrofit
 import retrofit2.converter.scalars.ScalarsConverterFactory
 import retrofit2.create
 import java.net.ConnectException
+import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.security.SecureRandom
@@ -35,7 +38,7 @@ class AddEditServerViewModel @Inject constructor(
     private val serverManager: ServerManager,
     private val timeoutInterceptor: TimeoutInterceptor,
     private val userAgentInterceptor: UserAgentInterceptor,
-    private val trustAllManager: TrustAllX509TrustManager
+    private val trustAllManager: TrustAllX509TrustManager,
 ) : ViewModel() {
     private val eventChannel = Channel<Event>()
     val eventFlow = eventChannel.receiveAsFlow()
@@ -64,31 +67,43 @@ class AddEditServerViewModel @Inject constructor(
 
         _isTesting.value = true
         val job = viewModelScope.launch {
-            val service = Retrofit.Builder()
-                .baseUrl(serverConfig.url)
-                .client(
-                    OkHttpClient().newBuilder().apply {
-                        addInterceptor(timeoutInterceptor)
-                        addInterceptor(userAgentInterceptor)
-
-                        val basicAuth = serverConfig.basicAuth
-                        if (basicAuth.isEnabled && basicAuth.username != null && basicAuth.password != null) {
-                            addInterceptor(BasicAuthInterceptor(basicAuth.username, basicAuth.password))
-                        }
-
-                        if (serverConfig.trustSelfSignedCertificates) {
-                            val sslContext = SSLContext.getInstance("SSL")
-                            sslContext.init(null, arrayOf(trustAllManager), SecureRandom())
-                            sslSocketFactory(sslContext.socketFactory, trustAllManager)
-                            hostnameVerifier { _, _ -> true }
-                        }
-                    }.build()
-                )
-                .addConverterFactory(ScalarsConverterFactory.create())
-                .build()
-                .create<TorrentService>()
-
             val error = try {
+                val service = Retrofit.Builder()
+                    .baseUrl(serverConfig.url)
+                    .client(
+                        OkHttpClient().newBuilder().apply clientBuilder@{
+                            addInterceptor(timeoutInterceptor)
+                            addInterceptor(userAgentInterceptor)
+
+                            val basicAuth = serverConfig.basicAuth
+                            if (basicAuth.isEnabled && basicAuth.username != null && basicAuth.password != null) {
+                                addInterceptor(BasicAuthInterceptor(basicAuth.username, basicAuth.password))
+                            }
+
+                            if (serverConfig.protocol == Protocol.HTTPS && serverConfig.trustSelfSignedCertificates) {
+                                val sslContext = SSLContext.getInstance("SSL")
+                                sslContext.init(null, arrayOf(trustAllManager), SecureRandom())
+                                sslSocketFactory(sslContext.socketFactory, trustAllManager)
+                                hostnameVerifier { _, _ -> true }
+                            }
+
+                            if (serverConfig.dnsOverHttps != null) {
+                                val dns = DnsOverHttps.Builder().apply {
+                                    client(this@clientBuilder.build())
+                                    url(serverConfig.dnsOverHttps.url.toHttpUrl())
+                                    bootstrapDnsHosts(
+                                        serverConfig.dnsOverHttps.bootstrapDnsHosts.map { InetAddress.getByName(it) },
+                                    )
+                                }.build()
+
+                                dns(dns)
+                            }
+                        }.build(),
+                    )
+                    .addConverterFactory(ScalarsConverterFactory.create())
+                    .build()
+                    .create<TorrentService>()
+
                 val response = service.login(serverConfig.username ?: "", serverConfig.password ?: "")
 
                 if (response.code() == 403) {
@@ -106,12 +121,6 @@ class AddEditServerViewModel @Inject constructor(
                 RequestResult.Error.RequestError.Timeout
             } catch (e: UnknownHostException) {
                 RequestResult.Error.RequestError.UnknownHost
-            } catch (e: JsonMappingException) {
-                if (e.cause is SocketTimeoutException) {
-                    RequestResult.Error.RequestError.Timeout
-                } else {
-                    RequestResult.Error.RequestError.Unknown("${e::class.simpleName} ${e.message}")
-                }
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     throw e
@@ -119,13 +128,11 @@ class AddEditServerViewModel @Inject constructor(
                 RequestResult.Error.RequestError.Unknown("${e::class.simpleName} ${e.message}")
             }
 
-            eventChannel.send(
-                if (error == null) {
-                    Event.TestSuccess
-                } else {
-                    Event.TestFailure(error)
-                }
-            )
+            if (error == null) {
+                eventChannel.send(Event.TestSuccess)
+            } else {
+                eventChannel.send(Event.TestFailure(error))
+            }
         }
 
         job.invokeOnCompletion { e ->
@@ -140,6 +147,6 @@ class AddEditServerViewModel @Inject constructor(
 
     sealed class Event {
         data class TestFailure(val error: RequestResult.Error) : Event()
-        object TestSuccess : Event()
+        data object TestSuccess : Event()
     }
 }

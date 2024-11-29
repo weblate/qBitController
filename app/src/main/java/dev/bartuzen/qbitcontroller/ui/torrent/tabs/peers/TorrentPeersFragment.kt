@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
 import by.kirich1409.viewbindingdelegate.viewBinding
+import coil.load
 import dagger.hilt.android.AndroidEntryPoint
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.databinding.ActivityTorrentBinding
@@ -24,6 +25,7 @@ import dev.bartuzen.qbitcontroller.databinding.DialogTorrentPeersAddBinding
 import dev.bartuzen.qbitcontroller.databinding.FragmentTorrentPeersBinding
 import dev.bartuzen.qbitcontroller.model.PeerFlag
 import dev.bartuzen.qbitcontroller.model.TorrentPeer
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.floorToDecimal
 import dev.bartuzen.qbitcontroller.utils.formatBytes
 import dev.bartuzen.qbitcontroller.utils.formatBytesPerSecond
@@ -55,13 +57,16 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
     constructor(serverId: Int, torrentHash: String) : this() {
         arguments = bundleOf(
             "serverId" to serverId,
-            "torrentHash" to torrentHash
+            "torrentHash" to torrentHash,
         )
     }
 
     private lateinit var onPageChange: ViewPager2.OnPageChangeCallback
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.recyclerPeers.applySystemBarInsets(top = false)
+
         requireActivity().addMenuProvider(
             object : MenuProvider {
                 override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -80,11 +85,18 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
                 }
             },
             viewLifecycleOwner,
-            Lifecycle.State.RESUMED
+            Lifecycle.State.RESUMED,
         )
 
         var actionMode: ActionMode? = null
-        val adapter = TorrentPeersAdapter().apply {
+        val adapter = TorrentPeersAdapter(
+            loadImage = { imageView, countryCode ->
+                imageView.load(
+                    data = viewModel.getFlagUrl(serverId, countryCode),
+                    imageLoader = viewModel.getImageLoader(serverId),
+                )
+            },
+        ).apply {
             onClick { peer ->
                 showPeerDetailsDialog(peer)
             }
@@ -97,26 +109,26 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
 
                     override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
 
-                    override fun onActionItemClicked(mode: ActionMode, item: MenuItem) = when (item.itemId) {
-                        R.id.menu_ban_peers -> {
-                            showBanPeersDialog(
-                                peers = selectedItems,
-                                onBan = {
-                                    finishSelection()
-                                    actionMode?.finish()
-                                }
-                            )
-                            true
+                    override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                        when (item.itemId) {
+                            R.id.menu_ban_peers -> {
+                                showBanPeersDialog(
+                                    peers = selectedItems,
+                                    onBan = {
+                                        finishSelection()
+                                        actionMode?.finish()
+                                    },
+                                )
+                            }
+                            R.id.menu_select_all -> {
+                                selectAll()
+                            }
+                            R.id.menu_select_inverse -> {
+                                selectInverse()
+                            }
+                            else -> return false
                         }
-                        R.id.menu_select_all -> {
-                            selectAll()
-                            true
-                        }
-                        R.id.menu_select_inverse -> {
-                            selectInverse()
-                            true
-                        }
-                        else -> false
+                        return true
                     }
 
                     override fun onDestroyActionMode(mode: ActionMode) {
@@ -134,7 +146,7 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
                     actionMode?.title = resources.getQuantityString(
                         R.plurals.torrent_peers_selected,
                         itemCount,
-                        itemCount
+                        itemCount,
                     )
                 }
             }
@@ -169,14 +181,13 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
             viewModel.loadPeers(serverId, torrentHash)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isNaturalLoading.launchAndCollectLatestIn(viewLifecycleOwner) { isNaturalLoading ->
-            val autoRefreshLoadingBar = viewModel.autoRefreshHideLoadingBar.value
-            binding.progressIndicator.visibility =
-                if (isNaturalLoading == true || isNaturalLoading == false && !autoRefreshLoadingBar) {
-                    View.VISIBLE
-                } else {
-                    View.GONE
-                }
+            if (isNaturalLoading == true) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.isRefreshing.launchAndCollectLatestIn(viewLifecycleOwner) { isRefreshing ->
@@ -256,7 +267,7 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
 
             if (peer.countryCode != null) {
                 val countryName = Locale("", peer.countryCode).getDisplayCountry(
-                    Locale(context.getString(R.string.language_code))
+                    Locale(context.getString(R.string.language_code)),
                 )
                 binding.textCountry.text = getString(R.string.torrent_peers_details_country, countryName)
                 binding.textCountry.visibility = View.VISIBLE
@@ -317,7 +328,7 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
                 viewModel.addPeers(
                     serverId,
                     torrentHash,
-                    binding.editPeers.text.toString().split("\n")
+                    binding.editPeers.text.toString().split("\n"),
                 )
             }
             setNegativeButton()
@@ -330,15 +341,15 @@ class TorrentPeersFragment() : Fragment(R.layout.fragment_torrent_peers) {
                 resources.getQuantityString(
                     R.plurals.torrent_peers_ban_title,
                     peers.size,
-                    peers.size
-                )
+                    peers.size,
+                ),
             )
             setMessage(
                 resources.getQuantityString(
                     R.plurals.torrent_peers_ban_desc,
                     peers.size,
-                    peers.size
-                )
+                    peers.size,
+                ),
             )
             setPositiveButton { _, _ ->
                 viewModel.banPeers(serverId, peers)

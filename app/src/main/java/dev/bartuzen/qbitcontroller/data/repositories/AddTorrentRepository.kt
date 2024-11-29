@@ -1,21 +1,22 @@
 package dev.bartuzen.qbitcontroller.data.repositories
 
+import dev.bartuzen.qbitcontroller.model.QBittorrentVersion
 import dev.bartuzen.qbitcontroller.network.RequestManager
 import dev.bartuzen.qbitcontroller.network.RequestResult
-import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
-import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class AddTorrentRepository @Inject constructor(
-    private val requestManager: RequestManager
+    private val requestManager: RequestManager,
 ) {
     suspend fun createTorrent(
         serverId: Int,
         links: List<String>?,
-        fileBytes: ByteArray?,
+        files: List<Pair<String, ByteArray>>?,
         savePath: String?,
         category: String?,
         tags: List<String>,
@@ -30,22 +31,27 @@ class AddTorrentRepository @Inject constructor(
         skipHashChecking: Boolean,
         isAutoTorrentManagementEnabled: Boolean?,
         isSequentialDownloadEnabled: Boolean,
-        isFirstLastPiecePrioritized: Boolean
+        isFirstLastPiecePrioritized: Boolean,
     ): RequestResult<String> {
-        val filePart = if (fileBytes != null) {
+        val fileParts = files?.map { (fileName, byteArray) ->
             MultipartBody.Part.createFormData(
-                "filename",
-                "torrent",
-                RequestBody.create(MediaType.parse("application/x-bittorrent"), fileBytes)
+                "torrents",
+                fileName,
+                byteArray.toRequestBody("application/x-bittorrent".toMediaTypeOrNull()),
             )
-        } else {
-            null
         }
+
+        val pausedKey = when (requestManager.getQBittorrentVersion(serverId)) {
+            QBittorrentVersion.V4 -> "paused"
+            QBittorrentVersion.V5 -> "stopped"
+        }
+        val pausedPart = MultipartBody.Part.createFormData(pausedKey, isPaused.toString())
+        val parts = fileParts.orEmpty() + pausedPart
 
         return requestManager.request(serverId) { service ->
             service.addTorrent(
                 links?.joinToString("\n"),
-                filePart,
+                parts,
                 savePath,
                 category,
                 tags.joinToString(",").ifEmpty { null },
@@ -56,11 +62,10 @@ class AddTorrentRepository @Inject constructor(
                 uploadSpeedLimit,
                 ratioLimit,
                 seedingTimeLimit,
-                isPaused,
                 skipHashChecking,
                 isAutoTorrentManagementEnabled,
                 isSequentialDownloadEnabled,
-                isFirstLastPiecePrioritized
+                isFirstLastPiecePrioritized,
             )
         }
     }

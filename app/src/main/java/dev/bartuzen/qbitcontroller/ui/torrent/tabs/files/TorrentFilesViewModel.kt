@@ -15,13 +15,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.ArrayDeque
 import javax.inject.Inject
 
 @HiltViewModel
 class TorrentFilesViewModel @Inject constructor(
     settingsManager: SettingsManager,
-    private val repository: TorrentFilesRepository
+    private val repository: TorrentFilesRepository,
 ) : ViewModel() {
     private val _torrentFiles = MutableStateFlow<TorrentFileNode?>(null)
     val torrentFiles = _torrentFiles.asStateFlow()
@@ -41,7 +40,6 @@ class TorrentFilesViewModel @Inject constructor(
     var isInitialLoadStarted = false
 
     val autoRefreshInterval = settingsManager.autoRefreshInterval.flow
-    val autoRefreshHideLoadingBar = settingsManager.autoRefreshHideLoadingBar.flow
 
     private fun updateFiles(serverId: Int, torrentHash: String) = viewModelScope.launch {
         when (val result = repository.getFiles(serverId, torrentHash)) {
@@ -131,16 +129,16 @@ class TorrentFilesViewModel @Inject constructor(
 
     fun goToFolder(node: String) {
         _nodeStack.update { stack ->
-            stack.clone().apply {
-                push(node)
+            ArrayDeque(stack).apply {
+                addLast(node)
             }
         }
     }
 
     fun goBack() {
         _nodeStack.update { stack ->
-            stack.clone().apply {
-                pop()
+            ArrayDeque(stack).apply {
+                removeLastOrNull()
             }
         }
     }
@@ -153,10 +151,10 @@ class TorrentFilesViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object TorrentNotFound : Event()
-        object PathIsInvalidOrInUse : Event()
-        object FilePriorityUpdated : Event()
-        object FileRenamed : Event()
-        object FolderRenamed : Event()
+        data object TorrentNotFound : Event()
+        data object PathIsInvalidOrInUse : Event()
+        data object FilePriorityUpdated : Event()
+        data object FileRenamed : Event()
+        data object FolderRenamed : Event()
     }
 }

@@ -3,16 +3,15 @@ package dev.bartuzen.qbitcontroller.data
 import android.content.Context
 import androidx.appcompat.app.AppCompatDelegate
 import dagger.hilt.android.qualifiers.ApplicationContext
-import dev.bartuzen.qbitcontroller.model.ServerConfig
+import dev.bartuzen.qbitcontroller.ui.torrentlist.TorrentFilter
 import dev.bartuzen.qbitcontroller.utils.sharedpreferences.enumPreference
 import dev.bartuzen.qbitcontroller.utils.sharedpreferences.primitivePreference
-import java.util.SortedMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class SettingsManager @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
 ) {
     private val sharedPref = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
@@ -21,10 +20,10 @@ class SettingsManager @Inject constructor(
     val isReverseSorting = primitivePreference(sharedPref, "isReverseSorting", false)
     val connectionTimeout = primitivePreference(sharedPref, "connectionTimeout", 10)
     val autoRefreshInterval = primitivePreference(sharedPref, "autoRefreshInterval", 0)
-    val autoRefreshHideLoadingBar = primitivePreference(sharedPref, "autoRefreshHideLoadingBar", false)
     val notificationCheckInterval = primitivePreference(sharedPref, "notificationCheckInterval", 15)
-    val areTorrentSwipeActionsEnabled = primitivePreference(sharedPref, "areTorrentSwipeActionsEnabled", false)
+    val areTorrentSwipeActionsEnabled = primitivePreference(sharedPref, "areTorrentSwipeActionsEnabled", true)
 
+    val defaultTorrentStatus = enumPreference(sharedPref, "defaultTorrentState", TorrentFilter.ALL, TorrentFilter::valueOf)
     val areStatesCollapsed = primitivePreference(sharedPref, "areStatesCollapsed", false)
     val areCategoriesCollapsed = primitivePreference(sharedPref, "areCategoriesCollapsed", false)
     val areTagsCollapsed = primitivePreference(sharedPref, "areTagsCollapsed", false)
@@ -34,12 +33,10 @@ class SettingsManager @Inject constructor(
     val isReverseSearchSorting = primitivePreference(sharedPref, "isReverseSearchSort", false)
 }
 
-typealias ServerConfigMap = SortedMap<Int, ServerConfig>
-
 enum class Theme {
     LIGHT,
     DARK,
-    SYSTEM_DEFAULT
+    SYSTEM_DEFAULT,
 }
 
 enum class TorrentSort {
@@ -59,7 +56,7 @@ enum class TorrentSort {
     TOTAL_LEECHES,
     ADDITION_DATE,
     COMPLETION_DATE,
-    LAST_ACTIVITY
+    LAST_ACTIVITY,
 }
 
 enum class SearchSort {
@@ -67,7 +64,7 @@ enum class SearchSort {
     SIZE,
     SEEDERS,
     LEECHERS,
-    SEARCH_ENGINE
+    SEARCH_ENGINE,
 }
 
 fun Theme.toDelegate() = when (this) {

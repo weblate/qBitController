@@ -1,24 +1,31 @@
 package dev.bartuzen.qbitcontroller.network
 
-import com.fasterxml.jackson.databind.DeserializationFeature
-import com.fasterxml.jackson.databind.JsonMappingException
-import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import dev.bartuzen.qbitcontroller.data.ServerManager
 import dev.bartuzen.qbitcontroller.model.Protocol
+import dev.bartuzen.qbitcontroller.model.QBittorrentVersion
+import dev.bartuzen.qbitcontroller.model.QBittorrentVersionCache
 import dev.bartuzen.qbitcontroller.model.ServerConfig
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.dnsoverhttps.DnsOverHttps
 import retrofit2.Response
 import retrofit2.Retrofit
-import retrofit2.converter.jackson.JacksonConverterFactory
+import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.converter.scalars.ScalarsConverterFactory
 import java.net.ConnectException
+import java.net.InetAddress
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 import java.security.SecureRandom
+import java.time.Duration
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.net.ssl.SSLContext
@@ -28,11 +35,22 @@ class RequestManager @Inject constructor(
     private val serverManager: ServerManager,
     private val timeoutInterceptor: TimeoutInterceptor,
     private val userAgentInterceptor: UserAgentInterceptor,
-    private val trustAllManager: TrustAllX509TrustManager
+    private val trustAllManager: TrustAllX509TrustManager,
 ) {
     private val torrentServiceMap = mutableMapOf<Int, TorrentService>()
+    private val okHttpClientMap = mutableMapOf<Int, OkHttpClient>()
+
     private val loggedInServerIds = mutableListOf<Int>()
     private val initialLoginLocks = mutableMapOf<Int, Mutex>()
+
+    private val versions = mutableMapOf<Int, QBittorrentVersionCache>()
+    private val versionLocks = mutableMapOf<Int, Mutex>()
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        explicitNulls = false
+    }
 
     init {
         serverManager.addServerListener(object : ServerManager.ServerListener {
@@ -40,67 +58,100 @@ class RequestManager @Inject constructor(
 
             override fun onServerRemovedListener(serverConfig: ServerConfig) {
                 torrentServiceMap.remove(serverConfig.id)
+                okHttpClientMap.remove(serverConfig.id)
                 loggedInServerIds.remove(serverConfig.id)
                 initialLoginLocks.remove(serverConfig.id)
+                versions.remove(serverConfig.id)
+                versionLocks.remove(serverConfig.id)
             }
 
             override fun onServerChangedListener(serverConfig: ServerConfig) {
                 torrentServiceMap.remove(serverConfig.id)
+                okHttpClientMap.remove(serverConfig.id)
                 loggedInServerIds.remove(serverConfig.id)
                 initialLoginLocks.remove(serverConfig.id)
+                versions.remove(serverConfig.id)
+                versionLocks.remove(serverConfig.id)
             }
         })
     }
+
+    fun getOkHttpClient(serverId: Int) = okHttpClientMap.getOrPut(serverId) {
+        val serverConfig = serverManager.getServer(serverId)
+
+        OkHttpClient().newBuilder().apply clientBuilder@{
+            cookieJar(SessionCookieJar())
+            addInterceptor(timeoutInterceptor)
+            addInterceptor(userAgentInterceptor)
+
+            val basicAuth = serverConfig.basicAuth
+            if (basicAuth.isEnabled && basicAuth.username != null && basicAuth.password != null) {
+                addInterceptor(BasicAuthInterceptor(basicAuth.username, basicAuth.password))
+            }
+
+            if (serverConfig.protocol == Protocol.HTTPS && serverConfig.trustSelfSignedCertificates) {
+                val sslContext = SSLContext.getInstance("SSL")
+                sslContext.init(null, arrayOf(trustAllManager), SecureRandom())
+                sslSocketFactory(sslContext.socketFactory, trustAllManager)
+                hostnameVerifier { _, _ -> true }
+            }
+
+            addInterceptor { chain ->
+                val request = chain.request()
+                    .newBuilder()
+                    .header("Connection", "close")
+                    .build()
+                chain.proceed(request)
+            }
+            retryOnConnectionFailure(true)
+
+            if (serverConfig.dnsOverHttps != null) {
+                val dns = DnsOverHttps.Builder().apply {
+                    client(this@clientBuilder.build())
+                    url(serverConfig.dnsOverHttps.url.toHttpUrl())
+                    bootstrapDnsHosts(serverConfig.dnsOverHttps.bootstrapDnsHosts.map { InetAddress.getByName(it) })
+                }.build()
+
+                dns(dns)
+            }
+        }.build()
+    }
+
+    fun getQBittorrentVersion(serverId: Int) = versions[serverId]?.version ?: QBittorrentVersion.V5
 
     private fun getTorrentService(serverId: Int) = torrentServiceMap.getOrPut(serverId) {
         val serverConfig = serverManager.getServer(serverId)
         val retrofit = Retrofit.Builder()
             .baseUrl(serverConfig.url)
-            .client(
-                OkHttpClient().newBuilder().apply {
-                    cookieJar(SessionCookieJar())
-                    addInterceptor(timeoutInterceptor)
-                    addInterceptor(userAgentInterceptor)
-
-                    val basicAuth = serverConfig.basicAuth
-                    if (basicAuth.isEnabled && basicAuth.username != null && basicAuth.password != null) {
-                        addInterceptor(BasicAuthInterceptor(basicAuth.username, basicAuth.password))
-                    }
-
-                    if (serverConfig.protocol == Protocol.HTTPS) {
-                        hostnameVerifier { _, _ -> true }
-
-                        if (serverConfig.trustSelfSignedCertificates) {
-                            val sslContext = SSLContext.getInstance("SSL")
-                            sslContext.init(null, arrayOf(trustAllManager), SecureRandom())
-                            sslSocketFactory(sslContext.socketFactory, trustAllManager)
-                        }
-                    }
-
-                    addInterceptor { chain ->
-                        val request = chain.request()
-                            .newBuilder()
-                            .header("Connection", "close")
-                            .build()
-                        chain.proceed(request)
-                    }
-                    retryOnConnectionFailure(true)
-                }.build()
-            )
+            .client(getOkHttpClient(serverId))
             .addConverterFactory(ScalarsConverterFactory.create())
-            .addConverterFactory(
-                JacksonConverterFactory.create(
-                    jacksonObjectMapper()
-                        .enable(DeserializationFeature.READ_UNKNOWN_ENUM_VALUES_USING_DEFAULT_VALUE)
-                        .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
-                )
-            )
-            .addConverterFactory(EnumConverterFactory())
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
         retrofit.create(TorrentService::class.java)
     }
 
     private fun getInitialLoginLock(serverId: Int) = initialLoginLocks.getOrPut(serverId) { Mutex() }
+
+    private suspend fun updateVersionIfNeeded(serverId: Int) {
+        val versionLock = versionLocks.getOrPut(serverId) { Mutex() }
+        versionLock.withLock {
+            val isVersionValid = versions[serverId]?.let { versionData ->
+                Duration.between(versionData.fetchDate, Instant.now()) < Duration.ofHours(1)
+            } == true
+            if (!isVersionValid) {
+                val service = getTorrentService(serverId)
+                val version = service.getVersion()
+                versions[serverId] = QBittorrentVersionCache(
+                    fetchDate = Instant.now(),
+                    version = if (version.body()?.startsWith("v4.") == true) {
+                        QBittorrentVersion.V4
+                    } else {
+                        QBittorrentVersion.V5
+                    },
+                )
+            }
+        }
+    }
 
     private suspend fun tryLogin(serverId: Int): RequestResult<Unit> {
         val service = getTorrentService(serverId)
@@ -124,8 +175,10 @@ class RequestManager @Inject constructor(
 
     private suspend fun <T : Any> tryRequest(
         serverId: Int,
-        block: suspend (service: TorrentService) -> Response<T>
+        block: suspend (service: TorrentService) -> Response<T>,
     ): RequestResult<T> {
+        updateVersionIfNeeded(serverId)
+
         val service = getTorrentService(serverId)
 
         val blockResponse = block(service)
@@ -177,12 +230,6 @@ class RequestManager @Inject constructor(
         RequestResult.Error.RequestError.Timeout
     } catch (e: UnknownHostException) {
         RequestResult.Error.RequestError.UnknownHost
-    } catch (e: JsonMappingException) {
-        if (e.cause is SocketTimeoutException) {
-            RequestResult.Error.RequestError.Timeout
-        } else {
-            RequestResult.Error.RequestError.Unknown("${e::class.simpleName} ${e.message}")
-        }
     } catch (e: Exception) {
         if (e is CancellationException) {
             throw e
@@ -211,14 +258,14 @@ sealed class RequestResult<out T : Any?> {
 
     sealed class Error : RequestResult<Nothing>() {
         sealed class RequestError : Error() {
-            object InvalidCredentials : RequestError()
-            object Banned : RequestError()
-            object CannotConnect : RequestError()
-            object UnknownHost : RequestError()
-            object Timeout : RequestError()
-            object NoData : RequestError()
+            data object InvalidCredentials : RequestError()
+            data object Banned : RequestError()
+            data object CannotConnect : RequestError()
+            data object UnknownHost : RequestError()
+            data object Timeout : RequestError()
+            data object NoData : RequestError()
             data class UnknownLoginResponse(val response: String?) : RequestError()
-            data class Unknown(val message: String?) : RequestError()
+            data class Unknown(val message: String) : RequestError()
         }
 
         data class ApiError(val code: Int) : Error()

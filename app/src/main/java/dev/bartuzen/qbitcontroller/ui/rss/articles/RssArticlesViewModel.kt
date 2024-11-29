@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.bartuzen.qbitcontroller.data.repositories.rss.RssArticlesRepository
 import dev.bartuzen.qbitcontroller.model.Article
-import dev.bartuzen.qbitcontroller.model.deserializers.parseRssFeedWithData
+import dev.bartuzen.qbitcontroller.model.serializers.parseRssFeedWithData
 import dev.bartuzen.qbitcontroller.network.RequestResult
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +19,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class RssArticlesViewModel @Inject constructor(
-    private val repository: RssArticlesRepository
+    private val repository: RssArticlesRepository,
 ) : ViewModel() {
     private val rssArticles = MutableStateFlow<List<Article>?>(null)
 
@@ -52,12 +52,16 @@ class RssArticlesViewModel @Inject constructor(
         }
     }
 
-    private fun updateRssArticles(serverId: Int, feedPath: List<String>) = viewModelScope.launch {
+    fun updateRssArticles(serverId: Int, feedPath: List<String>, uid: String?) = viewModelScope.launch {
         when (val result = repository.getRssFeeds(serverId)) {
             is RequestResult.Success -> {
-                val articles = parseRssFeedWithData(result.data, feedPath)
+                val (articles, newFeedPath) = parseRssFeedWithData(result.data, feedPath, uid)
                 if (articles != null) {
                     rssArticles.value = articles
+
+                    if (newFeedPath != null) {
+                        eventChannel.send(Event.FeedPathChanged(newFeedPath))
+                    }
                 } else {
                     eventChannel.send(Event.RssFeedNotFound)
                 }
@@ -68,38 +72,39 @@ class RssArticlesViewModel @Inject constructor(
         }
     }
 
-    fun loadRssArticles(serverId: Int, feedPath: List<String>) {
+    fun loadRssArticles(serverId: Int, feedPath: List<String>, uid: String?) {
         if (!isLoading.value) {
             _isLoading.value = true
-            updateRssArticles(serverId, feedPath).invokeOnCompletion {
+            updateRssArticles(serverId, feedPath, uid).invokeOnCompletion {
                 _isLoading.value = false
             }
         }
     }
 
-    fun refreshRssArticles(serverId: Int, feedPath: List<String>) {
+    fun refreshRssArticles(serverId: Int, feedPath: List<String>, uid: String?) {
         if (!isRefreshing.value) {
             _isRefreshing.value = true
-            updateRssArticles(serverId, feedPath).invokeOnCompletion {
+            updateRssArticles(serverId, feedPath, uid).invokeOnCompletion {
                 _isRefreshing.value = false
             }
         }
     }
 
-    fun markAsRead(serverId: Int, feedPath: List<String>, articleId: String?) = viewModelScope.launch {
-        when (val result = repository.markAsRead(serverId, feedPath, articleId)) {
-            is RequestResult.Success -> {
-                if (articleId == null) {
-                    eventChannel.send(Event.AllArticlesMarkedAsRead)
-                } else {
-                    eventChannel.send(Event.ArticleMarkedAsRead)
+    fun markAsRead(serverId: Int, feedPath: List<String>, articleId: String?, showMessage: Boolean = true) =
+        viewModelScope.launch {
+            when (val result = repository.markAsRead(serverId, feedPath, articleId)) {
+                is RequestResult.Success -> {
+                    if (articleId == null) {
+                        eventChannel.send(Event.AllArticlesMarkedAsRead)
+                    } else {
+                        eventChannel.send(Event.ArticleMarkedAsRead(showMessage))
+                    }
+                }
+                is RequestResult.Error -> {
+                    eventChannel.send(Event.Error(result))
                 }
             }
-            is RequestResult.Error -> {
-                eventChannel.send(Event.Error(result))
-            }
         }
-    }
 
     fun refreshFeed(serverId: Int, feedPath: List<String>) = viewModelScope.launch {
         when (val result = repository.refreshItem(serverId, feedPath)) {
@@ -118,9 +123,10 @@ class RssArticlesViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object RssFeedNotFound : Event()
-        object ArticleMarkedAsRead : Event()
-        object AllArticlesMarkedAsRead : Event()
-        object FeedRefreshed : Event()
+        data object RssFeedNotFound : Event()
+        data class ArticleMarkedAsRead(val showMessage: Boolean) : Event()
+        data object AllArticlesMarkedAsRead : Event()
+        data object FeedRefreshed : Event()
+        data class FeedPathChanged(val newPath: List<String>) : Event()
     }
 }

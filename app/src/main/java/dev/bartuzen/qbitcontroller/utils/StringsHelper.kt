@@ -1,10 +1,15 @@
 package dev.bartuzen.qbitcontroller.utils
 
 import android.content.Context
+import android.net.Uri
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.model.TorrentFilePriority
 import dev.bartuzen.qbitcontroller.model.TorrentState
 import dev.bartuzen.qbitcontroller.network.RequestResult
+import okhttp3.internal.publicsuffix.PublicSuffixDatabase
+import java.net.URI
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -41,6 +46,9 @@ fun formatBytes(context: Context, byte: Long) = when (byte) {
     }
 }
 
+@Composable
+fun formatBytes(byte: Long) = formatBytes(LocalContext.current, byte)
+
 fun formatBytesPerSecond(context: Context, byte: Long) = when (byte) {
     in 0 until 1024 -> {
         context.getString(R.string.speed_format, byte.toString(), context.getString(R.string.speed_bytes_per_second))
@@ -58,6 +66,9 @@ fun formatBytesPerSecond(context: Context, byte: Long) = when (byte) {
         context.getString(R.string.speed_format, text, context.getString(R.string.speed_gibibytes_per_second))
     }
 }
+
+@Composable
+fun formatBytesPerSecond(byte: Long) = formatBytesPerSecond(LocalContext.current, byte)
 
 fun formatSeconds(context: Context, seconds: Long) = when (seconds) {
     in 0 until 60 -> {
@@ -94,6 +105,12 @@ fun formatSeconds(context: Context, seconds: Long) = when (seconds) {
 
 fun formatSeconds(context: Context, seconds: Int) = formatSeconds(context, seconds.toLong())
 
+@Composable
+fun formatSeconds(seconds: Long) = formatSeconds(LocalContext.current, seconds)
+
+@Composable
+fun formatSeconds(seconds: Int) = formatSeconds(LocalContext.current, seconds)
+
 fun formatTorrentState(context: Context, state: TorrentState) = context.getString(
     when (state) {
         TorrentState.ERROR -> R.string.torrent_status_error
@@ -106,15 +123,17 @@ fun formatTorrentState(context: Context, state: TorrentState) = context.getStrin
         TorrentState.CHECKING_UP, TorrentState.CHECKING_DL -> R.string.torrent_status_checking
         TorrentState.CHECKING_RESUME_DATA -> R.string.torrent_status_checking_resume_data
         TorrentState.FORCED_UP -> R.string.torrent_status_force_seeding
-        TorrentState.ALLOCATING -> R.string.torrent_status_allocating_space
         TorrentState.DOWNLOADING -> R.string.torrent_status_downloading
         TorrentState.META_DL -> R.string.torrent_status_downloading_metadata
         TorrentState.FORCED_META_DL -> R.string.torrent_status_force_downloading_metadata
         TorrentState.FORCED_DL -> R.string.torrent_status_force_downloading
         TorrentState.MOVING -> R.string.torrent_status_moving
         TorrentState.UNKNOWN -> R.string.torrent_status_unknown
-    }
+    },
 )
+
+@Composable
+fun formatTorrentState(state: TorrentState) = formatTorrentState(LocalContext.current, state)
 
 fun formatFilePriority(context: Context, priority: TorrentFilePriority) = context.getString(
     when (priority) {
@@ -122,8 +141,11 @@ fun formatFilePriority(context: Context, priority: TorrentFilePriority) = contex
         TorrentFilePriority.NORMAL -> R.string.torrent_files_priority_normal
         TorrentFilePriority.HIGH -> R.string.torrent_files_priority_high
         TorrentFilePriority.MAXIMUM -> R.string.torrent_files_priority_maximum
-    }
+    },
 )
+
+@Composable
+fun formatFilePriority(priority: TorrentFilePriority) = formatFilePriority(LocalContext.current, priority)
 
 fun getErrorMessage(context: Context, error: RequestResult.Error) = when (error) {
     RequestResult.Error.RequestError.InvalidCredentials -> context.getString(R.string.error_invalid_credentials)
@@ -138,9 +160,32 @@ fun getErrorMessage(context: Context, error: RequestResult.Error) = when (error)
     is RequestResult.Error.ApiError -> context.getString(R.string.error_api, error.code)
 }
 
-fun formatDate(epochSecond: Long): String = Instant.ofEpochSecond(epochSecond)
-    .atZone(ZoneId.systemDefault())
+@Composable
+fun getErrorMessage(error: RequestResult.Error) = getErrorMessage(LocalContext.current, error)
+
+fun formatDate(epochSecondOrMilli: Long): String = if (epochSecondOrMilli >= 100000000000) {
+    Instant.ofEpochMilli(epochSecondOrMilli)
+} else {
+    Instant.ofEpochSecond(epochSecondOrMilli)
+}.atZone(ZoneId.systemDefault())
     .format(
         DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
-            .withZone(ZoneId.systemDefault())
+            .withZone(ZoneId.systemDefault()),
     )
+
+private val ipPattern = Regex(
+    """(?:[a-zA-Z]+://)?(?:((?:\d{1,3}\.){3}\d{1,3})|\[?((?:[A-Fa-f0-9]{4}:){7}[A-Fa-f0-9]{4})]?)(?::\d+)?(?:/.*)?""",
+)
+
+fun formatUri(uri: String) = try {
+    val ipAddressMatch = ipPattern.matchEntire(uri)
+    if (ipAddressMatch != null) {
+        val groups = ipAddressMatch.groups
+        (groups[1] ?: groups[2])?.value
+    } else {
+        val host = Uri.parse(uri).host ?: URI.create(uri).host ?: throw IllegalArgumentException()
+        PublicSuffixDatabase.get().getEffectiveTldPlusOne(host)
+    }
+} catch (_: IllegalArgumentException) {
+    null
+} ?: uri

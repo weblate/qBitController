@@ -4,17 +4,16 @@ import android.annotation.SuppressLint
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
-import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.databinding.ItemTorrentPieceBinding
 import dev.bartuzen.qbitcontroller.model.PieceState
-import dev.bartuzen.qbitcontroller.utils.getColorCompat
+import dev.bartuzen.qbitcontroller.utils.getThemeColor
+import dev.bartuzen.qbitcontroller.utils.themeColors
 
 class TorrentPiecesAdapter : RecyclerView.Adapter<TorrentPiecesAdapter.ViewHolder>() {
     private var pieces: List<PieceState> = listOf()
 
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) = ViewHolder(
-        ItemTorrentPieceBinding.inflate(LayoutInflater.from(parent.context), parent, false)
-    )
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
+        ViewHolder(ItemTorrentPieceBinding.inflate(LayoutInflater.from(parent.context), parent, false))
 
     override fun onBindViewHolder(holder: TorrentPiecesAdapter.ViewHolder, position: Int) {
         holder.bind(pieces[position])
@@ -34,12 +33,15 @@ class TorrentPiecesAdapter : RecyclerView.Adapter<TorrentPiecesAdapter.ViewHolde
         fun bind(piece: PieceState) {
             val context = binding.root.context
 
-            val colorId = if (piece == PieceState.DOWNLOADED) {
-                R.color.piece_downloaded
-            } else {
-                R.color.piece_not_downloaded
-            }
-            binding.viewPiece.setBackgroundColor(context.getColorCompat(colorId))
+            val backgroundColor = context.getThemeColor(
+                themeColors.colorPrimary,
+                alpha = when (piece) {
+                    PieceState.NOT_DOWNLOADED -> 63
+                    PieceState.DOWNLOADING -> 127
+                    PieceState.DOWNLOADED -> 255
+                },
+            )
+            binding.viewPiece.setBackgroundColor(backgroundColor)
         }
     }
 }

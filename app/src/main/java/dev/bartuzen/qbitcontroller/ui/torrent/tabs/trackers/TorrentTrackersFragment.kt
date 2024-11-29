@@ -22,6 +22,7 @@ import dev.bartuzen.qbitcontroller.databinding.ActivityTorrentBinding
 import dev.bartuzen.qbitcontroller.databinding.DialogEditTrackerBinding
 import dev.bartuzen.qbitcontroller.databinding.DialogTorrentTrackersAddBinding
 import dev.bartuzen.qbitcontroller.databinding.FragmentTorrentTrackersBinding
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getErrorMessage
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectIn
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
@@ -48,13 +49,16 @@ class TorrentTrackersFragment() : Fragment(R.layout.fragment_torrent_trackers) {
     constructor(serverId: Int, torrentHash: String) : this() {
         arguments = bundleOf(
             "serverId" to serverId,
-            "torrentHash" to torrentHash
+            "torrentHash" to torrentHash,
         )
     }
 
     private lateinit var onPageChange: ViewPager2.OnPageChangeCallback
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.recyclerTrackers.applySystemBarInsets(top = false)
+
         requireActivity().addMenuProvider(
             object : MenuProvider {
                 override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -73,7 +77,7 @@ class TorrentTrackersFragment() : Fragment(R.layout.fragment_torrent_trackers) {
                 }
             },
             viewLifecycleOwner,
-            Lifecycle.State.RESUMED
+            Lifecycle.State.RESUMED,
         )
 
         var actionMode: ActionMode? = null
@@ -87,52 +91,57 @@ class TorrentTrackersFragment() : Fragment(R.layout.fragment_torrent_trackers) {
 
                     override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = false
 
-                    override fun onActionItemClicked(mode: ActionMode, item: MenuItem) = when (item.itemId) {
-                        R.id.menu_delete -> {
-                            val items = selectedItems
-                                .filter { !it.startsWith("0") }
-                                .map { it.substring(1) }
-                            if (items.isNotEmpty()) {
-                                showDeleteTrackersDialog(
-                                    trackerKeys = items,
-                                    onDelete = {
-                                        finishSelection()
-                                        actionMode?.finish()
-                                    }
-                                )
-                            } else {
-                                showSnackbar(R.string.torrent_trackers_cannot_delete_default, view = requireActivity().view)
-                                finishSelection()
-                                actionMode?.finish()
+                    override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
+                        when (item.itemId) {
+                            R.id.menu_delete -> {
+                                val items = selectedItems
+                                    .filter { !it.startsWith("0") }
+                                    .map { it.substring(1) }
+                                if (items.isNotEmpty()) {
+                                    showDeleteTrackersDialog(
+                                        trackerKeys = items,
+                                        onDelete = {
+                                            finishSelection()
+                                            actionMode?.finish()
+                                        },
+                                    )
+                                } else {
+                                    showSnackbar(
+                                        R.string.torrent_trackers_cannot_delete_default,
+                                        view = requireActivity().view,
+                                    )
+                                    finishSelection()
+                                    actionMode?.finish()
+                                }
                             }
-                            true
-                        }
-                        R.id.menu_edit -> {
-                            val selectedItem = selectedItems.first()
-                            if (selectedItem.first() == '1') {
-                                val tracker = selectedItem.substring(1)
-                                showEditTrackerDialog(
-                                    tracker = tracker,
-                                    onSuccess = { newUrl ->
-                                        viewModel.editTracker(serverId, torrentHash, tracker, newUrl)
-                                    }
-                                )
-                            } else {
-                                showSnackbar(R.string.torrent_trackers_cannot_edit_default, view = requireActivity().view)
-                                finishSelection()
-                                actionMode?.finish()
+                            R.id.menu_edit -> {
+                                val selectedItem = selectedItems.firstOrNull() ?: return true
+                                if (selectedItem.first() == '1') {
+                                    val tracker = selectedItem.substring(1)
+                                    showEditTrackerDialog(
+                                        tracker = tracker,
+                                        onSuccess = { newUrl ->
+                                            viewModel.editTracker(serverId, torrentHash, tracker, newUrl)
+                                        },
+                                    )
+                                } else {
+                                    showSnackbar(
+                                        R.string.torrent_trackers_cannot_edit_default,
+                                        view = requireActivity().view,
+                                    )
+                                    finishSelection()
+                                    actionMode?.finish()
+                                }
                             }
-                            true
+                            R.id.menu_select_all -> {
+                                selectAll()
+                            }
+                            R.id.menu_select_inverse -> {
+                                selectInverse()
+                            }
+                            else -> return false
                         }
-                        R.id.menu_select_all -> {
-                            selectAll()
-                            true
-                        }
-                        R.id.menu_select_inverse -> {
-                            selectInverse()
-                            true
-                        }
-                        else -> false
+                        return true
                     }
 
                     override fun onDestroyActionMode(mode: ActionMode) {
@@ -150,7 +159,7 @@ class TorrentTrackersFragment() : Fragment(R.layout.fragment_torrent_trackers) {
                     actionMode?.title = resources.getQuantityString(
                         R.plurals.torrent_trackers_selected,
                         itemCount,
-                        itemCount
+                        itemCount,
                     )
                 }
                 actionMode?.menu?.findItem(R.id.menu_edit)?.isEnabled = itemCount == 1
@@ -186,14 +195,13 @@ class TorrentTrackersFragment() : Fragment(R.layout.fragment_torrent_trackers) {
             viewModel.loadTrackers(serverId, torrentHash)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isNaturalLoading.launchAndCollectLatestIn(viewLifecycleOwner) { isNaturalLoading ->
-            val autoRefreshLoadingBar = viewModel.autoRefreshHideLoadingBar.value
-            binding.progressIndicator.visibility =
-                if (isNaturalLoading == true || isNaturalLoading == false && !autoRefreshLoadingBar) {
-                    View.VISIBLE
-                } else {
-                    View.GONE
-                }
+            if (isNaturalLoading == true) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.isRefreshing.launchAndCollectLatestIn(viewLifecycleOwner) { isRefreshing ->
@@ -246,7 +254,7 @@ class TorrentTrackersFragment() : Fragment(R.layout.fragment_torrent_trackers) {
                 viewModel.addTrackers(
                     serverId,
                     torrentHash,
-                    binding.editTrackers.text.toString().split("\n")
+                    binding.editTrackers.text.toString().split("\n"),
                 )
             }
             setNegativeButton()
@@ -259,15 +267,15 @@ class TorrentTrackersFragment() : Fragment(R.layout.fragment_torrent_trackers) {
                 resources.getQuantityString(
                     R.plurals.torrent_trackers_delete_title,
                     trackerKeys.size,
-                    trackerKeys.size
-                )
+                    trackerKeys.size,
+                ),
             )
             setMessage(
                 resources.getQuantityString(
                     R.plurals.torrent_trackers_delete_desc,
                     trackerKeys.size,
-                    trackerKeys.size
-                )
+                    trackerKeys.size,
+                ),
             )
             setPositiveButton { _, _ ->
                 viewModel.deleteTrackers(serverId, torrentHash, trackerKeys)

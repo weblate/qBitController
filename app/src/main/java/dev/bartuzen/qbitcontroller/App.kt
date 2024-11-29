@@ -4,6 +4,10 @@ import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import coil.ImageLoader
+import coil.ImageLoaderFactory
+import coil.decode.SvgDecoder
+import com.google.android.material.color.DynamicColors
 import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
 import dev.bartuzen.qbitcontroller.data.ConfigMigrator
@@ -17,12 +21,12 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltAndroidApp
-class App : Application(), Configuration.Provider {
+class App : Application(), Configuration.Provider, ImageLoaderFactory {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
     @Inject
-    @Suppress("ktlint:standard:property-naming")
+    @Suppress("ktlint:standard:backing-property-naming")
     lateinit var _settingsManager: Lazy<SettingsManager>
     private val settingsManager: SettingsManager get() = _settingsManager.get()
 
@@ -32,17 +36,28 @@ class App : Application(), Configuration.Provider {
     @Inject
     lateinit var notificationManager: AppNotificationManager
 
-    override fun getWorkManagerConfiguration() = Configuration.Builder()
+    override val workManagerConfiguration get() = Configuration.Builder()
         .setWorkerFactory(workerFactory)
+        .build()
+
+    override fun newImageLoader() = ImageLoader.Builder(this)
+        .components {
+            add(SvgDecoder.Factory())
+        }
         .build()
 
     override fun onCreate() {
         super.onCreate()
+        DynamicColors.applyToActivitiesIfAvailable(this)
 
         configMigrator.run()
 
         notificationManager.updateChannels()
-        notificationManager.startWorker()
+        CoroutineScope(Dispatchers.Main).launch {
+            settingsManager.notificationCheckInterval.flow.collectLatest {
+                notificationManager.startWorker()
+            }
+        }
 
         CoroutineScope(Dispatchers.Main).launch {
             settingsManager.theme.flow.collectLatest { theme ->

@@ -5,26 +5,21 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.bartuzen.qbitcontroller.data.repositories.rss.RssFeedRepository
 import dev.bartuzen.qbitcontroller.model.RssFeedNode
-import dev.bartuzen.qbitcontroller.model.deserializers.parseRssFeeds
+import dev.bartuzen.qbitcontroller.model.serializers.parseRssFeeds
 import dev.bartuzen.qbitcontroller.network.RequestResult
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.util.ArrayDeque
 import javax.inject.Inject
 
 @HiltViewModel
 class RssFeedsViewModel @Inject constructor(
-    private val repository: RssFeedRepository
+    private val repository: RssFeedRepository,
 ) : ViewModel() {
     private val _rssFeeds = MutableStateFlow<RssFeedNode?>(null)
     val rssFeeds = _rssFeeds.asStateFlow()
-
-    private val _currentDirectory = MutableStateFlow(ArrayDeque<String>())
-    val currentDirectory = _currentDirectory.asStateFlow()
 
     private val eventChannel = Channel<Event>()
     val eventFlow = eventChannel.receiveAsFlow()
@@ -36,6 +31,8 @@ class RssFeedsViewModel @Inject constructor(
     val isRefreshing = _isRefreshing.asStateFlow()
 
     var isInitialLoadStarted = false
+
+    val collapsedNodes: MutableSet<String> = mutableSetOf()
 
     private fun updateRssFeeds(serverId: Int) = viewModelScope.launch {
         when (val result = repository.getRssFeeds(serverId)) {
@@ -176,46 +173,24 @@ class RssFeedsViewModel @Inject constructor(
         }
     }
 
-    fun goToFolder(node: String) {
-        _currentDirectory.update { stack ->
-            stack.clone().apply {
-                push(node)
-            }
-        }
-    }
-
-    fun goBack() {
-        _currentDirectory.update { stack ->
-            stack.clone().apply {
-                pop()
-            }
-        }
-    }
-
-    fun goToRoot() {
-        _currentDirectory.update {
-            ArrayDeque()
-        }
-    }
-
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object AllFeedsRefreshed : Event()
-        object FeedAddError : Event()
-        object FeedRenameError : Event()
-        object FeedMoveError : Event()
-        object FeedDeleteError : Event()
-        object FolderAddError : Event()
-        object FolderRenameError : Event()
-        object FolderMoveError : Event()
-        object FolderDeleteError : Event()
-        object FeedAdded : Event()
-        object FeedRenamed : Event()
-        object FeedMoved : Event()
-        object FeedDeleted : Event()
-        object FolderAdded : Event()
-        object FolderRenamed : Event()
-        object FolderMoved : Event()
-        object FolderDeleted : Event()
+        data object AllFeedsRefreshed : Event()
+        data object FeedAddError : Event()
+        data object FeedRenameError : Event()
+        data object FeedMoveError : Event()
+        data object FeedDeleteError : Event()
+        data object FolderAddError : Event()
+        data object FolderRenameError : Event()
+        data object FolderMoveError : Event()
+        data object FolderDeleteError : Event()
+        data object FeedAdded : Event()
+        data object FeedRenamed : Event()
+        data object FeedMoved : Event()
+        data object FeedDeleted : Event()
+        data object FolderAdded : Event()
+        data object FolderRenamed : Event()
+        data object FolderMoved : Event()
+        data object FolderDeleted : Event()
     }
 }

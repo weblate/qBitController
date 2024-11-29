@@ -8,21 +8,27 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.Constraints
-import androidx.work.ExistingWorkPolicy
+import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.data.ServerManager
+import dev.bartuzen.qbitcontroller.data.SettingsManager
 import dev.bartuzen.qbitcontroller.model.ServerConfig
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
 
 @Singleton
 class AppNotificationManager @Inject constructor(
     private val serverManager: ServerManager,
-    @ApplicationContext private val context: Context
+    private val settingsManager: SettingsManager,
+    @ApplicationContext private val context: Context,
 ) {
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -43,21 +49,33 @@ class AppNotificationManager @Inject constructor(
     }
 
     fun startWorker() {
-        val areNotificationsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        val workManager = WorkManager.getInstance(context)
+
+        val repeatInterval = settingsManager.notificationCheckInterval.value.toLong()
+        val areNotificationsEnabled =
+            NotificationManagerCompat.from(context).areNotificationsEnabled() && repeatInterval != 0L
         if (!areNotificationsEnabled) {
+            workManager.cancelUniqueWork("torrent_downloaded")
             return
         }
 
-        val workManager = WorkManager.getInstance(context)
+        val currentWork = workManager.getWorkInfosForUniqueWork("torrent_downloaded").get().firstOrNull()
 
-        val work = OneTimeWorkRequestBuilder<TorrentDownloadedWorker>()
+        if (currentWork != null &&
+            currentWork.state != WorkInfo.State.CANCELLED &&
+            currentWork.periodicityInfo?.repeatIntervalMillis?.milliseconds == repeatInterval.minutes
+        ) {
+            return
+        }
+
+        val work = PeriodicWorkRequestBuilder<TorrentDownloadedWorker>(repeatInterval, TimeUnit.MINUTES)
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
+                    .build(),
             ).build()
 
-        workManager.enqueueUniqueWork("torrent_downloaded", ExistingWorkPolicy.KEEP, work)
+        workManager.enqueueUniquePeriodicWork("torrent_downloaded", ExistingPeriodicWorkPolicy.REPLACE, work)
     }
 
     fun updateChannels() {
@@ -78,7 +96,7 @@ class AppNotificationManager @Inject constructor(
             val downloadedChannel = NotificationChannel(
                 "channel_server_${serverConfig.id}_downloaded",
                 context.getString(R.string.notification_channel_download_completed),
-                NotificationManager.IMPORTANCE_HIGH
+                NotificationManager.IMPORTANCE_HIGH,
             ).apply {
                 group = "group_server_${serverConfig.id}"
             }

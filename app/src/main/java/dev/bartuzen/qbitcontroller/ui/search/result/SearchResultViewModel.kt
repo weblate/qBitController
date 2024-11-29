@@ -26,7 +26,7 @@ import javax.inject.Inject
 class SearchResultViewModel @Inject constructor(
     private val repository: SearchResultRepository,
     private val settingsManager: SettingsManager,
-    private val state: SavedStateHandle
+    private val state: SavedStateHandle,
 ) : ViewModel() {
     private val searchResult = MutableStateFlow<Search?>(null)
 
@@ -39,8 +39,8 @@ class SearchResultViewModel @Inject constructor(
             sizeMin = null,
             sizeMax = null,
             sizeMinUnit = 2,
-            sizeMaxUnit = 2
-        )
+            sizeMaxUnit = 2,
+        ),
     )
     val filter = _filter.asStateFlow()
 
@@ -55,7 +55,7 @@ class SearchResultViewModel @Inject constructor(
                 null
             }
         }.filterNotNull().map { (searchResults, searchSort, isReverseSearchSorting) ->
-            withContext(Dispatchers.IO) {
+            withContext(Dispatchers.Default) {
                 searchResults.run {
                     val comparator = when (searchSort) {
                         SearchSort.NAME -> {
@@ -232,6 +232,17 @@ class SearchResultViewModel @Inject constructor(
         _filter.value = filter
     }
 
+    fun resetFilter() {
+        _filter.value = Filter(
+            seedsMin = null,
+            seedsMax = null,
+            sizeMin = null,
+            sizeMax = null,
+            sizeMinUnit = 2,
+            sizeMaxUnit = 2,
+        )
+    }
+
     fun setSearchSort(searchSort: SearchSort) {
         settingsManager.searchSort.value = searchSort
     }
@@ -246,7 +257,7 @@ class SearchResultViewModel @Inject constructor(
         val sizeMin: Long?,
         val sizeMax: Long?,
         val sizeMinUnit: Int,
-        val sizeMaxUnit: Int
+        val sizeMaxUnit: Int,
     ) {
         private fun Int.pow(x: Int): Long {
             var number = 1L
@@ -271,6 +282,6 @@ class SearchResultViewModel @Inject constructor(
 
     sealed class Event {
         data class Error(val error: RequestResult.Error) : Event()
-        object SearchStopped : Event()
+        data object SearchStopped : Event()
     }
 }

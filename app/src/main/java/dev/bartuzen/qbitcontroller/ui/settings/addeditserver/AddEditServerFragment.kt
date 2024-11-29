@@ -22,18 +22,21 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.bartuzen.qbitcontroller.R
 import dev.bartuzen.qbitcontroller.databinding.FragmentSettingsAddEditServerBinding
 import dev.bartuzen.qbitcontroller.model.BasicAuth
+import dev.bartuzen.qbitcontroller.model.DnsOverHttps
 import dev.bartuzen.qbitcontroller.model.Protocol
 import dev.bartuzen.qbitcontroller.model.ServerConfig
 import dev.bartuzen.qbitcontroller.ui.settings.addeditserver.advanced.AdvancedServerSettingsFragment
+import dev.bartuzen.qbitcontroller.utils.applySystemBarInsets
 import dev.bartuzen.qbitcontroller.utils.getErrorMessage
 import dev.bartuzen.qbitcontroller.utils.getParcelableCompat
+import dev.bartuzen.qbitcontroller.utils.getSerializableCompat
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectIn
 import dev.bartuzen.qbitcontroller.utils.launchAndCollectLatestIn
 import dev.bartuzen.qbitcontroller.utils.requireAppCompatActivity
 import dev.bartuzen.qbitcontroller.utils.setDefaultAnimations
 import dev.bartuzen.qbitcontroller.utils.setTextWithoutAnimation
 import dev.bartuzen.qbitcontroller.utils.showSnackbar
-import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 @AndroidEntryPoint
 class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_server) {
@@ -44,19 +47,22 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
     private val serverId get() = arguments?.getInt("serverId", -1).takeIf { it != -1 }
 
     private var basicAuth = BasicAuth(false, null, null)
+    private var dnsOverHttps: DnsOverHttps? = null
 
     constructor(serverId: Int?) : this() {
         arguments = bundleOf("serverId" to serverId)
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        requireAppCompatActivity().supportActionBar?.setTitle(
-            if (serverId == null) {
-                R.string.settings_server_title_add
-            } else {
-                R.string.settings_server_title_edit
-            }
-        )
+        binding.progressIndicator.applySystemBarInsets(top = false, bottom = false)
+        binding.scrollView.applySystemBarInsets(top = false)
+
+        val titleRes = if (serverId == null) {
+            R.string.settings_server_title_add
+        } else {
+            R.string.settings_server_title_edit
+        }
+        requireAppCompatActivity().supportActionBar?.setTitle(titleRes)
 
         requireActivity().addMenuProvider(
             object : MenuProvider {
@@ -69,17 +75,20 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
                         R.id.menu_save -> {
                             saveServerConfig()
                         }
+
                         R.id.menu_delete -> {
                             deleteServerConfig()
                         }
+
                         R.id.menu_advanced -> {
                             parentFragmentManager.commit {
                                 setReorderingAllowed(true)
                                 setDefaultAnimations()
-                                replace(R.id.container, AdvancedServerSettingsFragment(basicAuth))
+                                replace(R.id.container, AdvancedServerSettingsFragment(basicAuth, dnsOverHttps))
                                 addToBackStack(null)
                             }
                         }
+
                         else -> return false
                     }
                     return true
@@ -96,17 +105,18 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
             // If there are back stack entries, we will pop the fragment when we are done. In this case, an animation will
             // be played so menu entries should disappear the moment we pop the fragment, and not wait for the animation to
             // finish. Otherwise we will finish the activity. In this case, we should wait for activity animation to finish.
-            if (parentFragmentManager.backStackEntryCount > 0) Lifecycle.State.RESUMED else Lifecycle.State.STARTED
+            if (parentFragmentManager.backStackEntryCount > 0) Lifecycle.State.RESUMED else Lifecycle.State.STARTED,
         )
 
         setFragmentResultListener("advancedServerSettingsResult") { _, bundle ->
             basicAuth = bundle.getParcelableCompat("basicAuth")!!
+            dnsOverHttps = bundle.getSerializableCompat("dnsOverHttps")
         }
 
         binding.spinnerProtocol.adapter = ArrayAdapter(
             requireContext(),
             android.R.layout.simple_spinner_dropdown_item,
-            listOf("HTTP", "HTTPS")
+            listOf("HTTP", "HTTPS"),
         )
 
         binding.spinnerProtocol.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -120,6 +130,7 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
         serverId?.let { id ->
             val serverConfig = viewModel.getServerConfig(id)
             basicAuth = serverConfig.basicAuth
+            dnsOverHttps = serverConfig.dnsOverHttps
 
             binding.inputLayoutName.setTextWithoutAnimation(serverConfig.name)
             binding.spinnerProtocol.setSelection(serverConfig.protocol.ordinal)
@@ -136,8 +147,13 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
             viewModel.testConnection(config)
         }
 
+        binding.progressIndicator.setVisibilityAfterHide(View.GONE)
         viewModel.isTesting.launchAndCollectLatestIn(viewLifecycleOwner) { isTesting ->
-            binding.progressIndicator.visibility = if (isTesting) View.VISIBLE else View.GONE
+            if (isTesting) {
+                binding.progressIndicator.show()
+            } else {
+                binding.progressIndicator.hide()
+            }
         }
 
         viewModel.eventFlow.launchAndCollectIn(viewLifecycleOwner) { event ->
@@ -145,6 +161,7 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
                 is AddEditServerViewModel.Event.TestFailure -> {
                     showSnackbar(getErrorMessage(requireContext(), event.error))
                 }
+
                 AddEditServerViewModel.Event.TestSuccess -> {
                     showSnackbar(R.string.settings_server_connection_success)
                 }
@@ -154,7 +171,7 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
 
     private fun validateAndGetServerConfig(): ServerConfig? {
         val name = binding.editName.text.toString().trim().ifEmpty { null }
-        val protocol = Protocol.values()[binding.spinnerProtocol.selectedItemPosition]
+        val protocol = Protocol.entries[binding.spinnerProtocol.selectedItemPosition]
         val host = binding.editHost.text.toString().trim().ifEmpty { null }
         val port = binding.editPort.text.toString().toIntOrNull()
         val path = binding.editPath.text.toString().trim().ifEmpty { null }
@@ -207,10 +224,11 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
             username = username,
             password = password,
             trustSelfSignedCertificates = trustSelfSignedCertificates,
-            basicAuth = basicAuth
+            basicAuth = basicAuth,
+            dnsOverHttps = dnsOverHttps,
         )
 
-        if (HttpUrl.parse(config.url) == null) {
+        if (config.url.toHttpUrlOrNull() == null) {
             showSnackbar(R.string.settings_server_url_configuration_not_valid)
             return null
         }
@@ -262,6 +280,6 @@ class AddEditServerFragment() : Fragment(R.layout.fragment_settings_add_edit_ser
     enum class Result {
         ADDED,
         EDITED,
-        DELETED
+        DELETED,
     }
 }

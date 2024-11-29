@@ -14,7 +14,6 @@
     <string name="torrent_status_checking">Checking</string>
     <string name="torrent_status_completed">Completed</string>
     <string name="torrent_status_force_seeding">[F] Seeding</string>
-    <string name="torrent_status_allocating_space">Allocating Space</string>
     <string name="torrent_status_downloading">Downloading</string>
     <string name="torrent_status_checking_resume_data">Checking Resume Data</string>
     <string name="torrent_status_downloading_metadata">Downloading Metadata</string>
@@ -68,12 +67,20 @@
     <string name="main_no_servers">No servers have been found. Click here to add one.</string>
     <string name="main_add_server">Add Server</string>
 
+    <string name="torrent_list_empty_title">No Torrents Found</string>
+    <string name="torrent_list_empty_description">You don\'t have any torrents. Add one to get started.</string>
+    <string name="torrent_list_empty_rss">Add via RSS</string>
+    <string name="torrent_list_empty_search">Search Torrents</string>
+    <string name="torrent_list_empty_add">Add Torrent</string>
+    <string name="torrent_list_no_result_title">No Results Found</string>
+    <string name="torrent_list_no_result_description">No torrents match your current filters. Try adjusting your filters or search criteria.</string>
+    <string name="torrent_list_no_result_reset">Reset Filters</string>
+
     <string name="torrent_list_action_add_torrent">Add Torrent</string>
     <string name="torrent_list_action_rss">RSS</string>
     <string name="torrent_list_action_search_online">Search Online</string>
     <string name="torrent_list_action_statistics">Statistics</string>
     <string name="torrent_list_action_execution_log">Execution Log</string>
-    <string name="torrent_list_action_alternative_speed_limits">Alternative Speed Limits</string>
     <string name="torrent_list_action_shutdown">Quit qBittorrent</string>
     <string name="torrent_list_action_sort">Sort</string>
     <string name="torrent_list_action_sort_name">Name</string>
@@ -104,6 +111,7 @@
     <string name="torrent_list_action_priority_maximize">Maximize Priority</string>
     <string name="torrent_list_action_priority_minimize">Minimize Priority</string>
     <string name="torrent_list_action_set_location">Set Location</string>
+    <string name="torrent_list_action_set_category">Set Category</string>
 
     <plurals name="torrent_list_delete_torrents">
         <item quantity="one">Delete %1$d Torrent</item>
@@ -168,6 +176,7 @@
     <string name="torrent_list_trackers_format">%1$s (%2$d)</string>
 
     <string name="torrent_speed_limits_title">Speed Limits</string>
+    <string name="torrent_speed_alternative_speed_limits">Alternative Speed Limits</string>
     <string name="torrent_speed_download_limit">Download Speed Limit</string>
     <string name="torrent_speed_upload_limit">Upload Speed Limit</string>
     <string name="torrent_speed_update_success">Speed limits updated successfully.</string>
@@ -180,6 +189,7 @@
 
     <string name="torrent_list_status">Status</string>
     <string name="torrent_list_status_format">%1$s (%2$d)</string>
+    <string name="torrent_list_status_set_as_default">Set as Default</string>
     <string name="torrent_list_status_all">All</string>
     <string name="torrent_list_status_downloading">Downloading</string>
     <string name="torrent_list_status_seeding">Seeding</string>
@@ -270,7 +280,8 @@
     <string name="torrent_option_share_limit_disable">Disable share limit</string>
     <string name="torrent_option_share_limit_custom">Set custom share limit</string>
     <string name="torrent_option_share_limit_ratio">Ratio</string>
-    <string name="torrent_option_share_limit_time">Minutes</string>
+    <string name="torrent_option_share_limit_total_minutes">Total Minutes</string>
+    <string name="torrent_option_share_limit_inactive_minutes">Inactive Minutes</string>
     <string name="torrent_option_prioritize_first_last_piece">Download first and last pieces first</string>
     <string name="torrent_option_sequential_download">Download in sequential order</string>
 
@@ -285,12 +296,16 @@
     <string name="torrent_export_error">Couldn\'t export torrent.</string>
 
     <string name="torrent_rename_torrent_hint">Name</string>
+    <string name="torrent_force_recheck_confirm">Are you sure you want to force recheck this torrent?</string>
     <string name="torrent_no_categories">Couldn\'t find any categories.</string>
     <string name="torrent_no_tags">Couldn\'t find any tags.</string>
 
     <string name="torrent_overview_information">Information</string>
     <string name="torrent_overview_total_size">Total Size</string>
     <string name="torrent_overview_added_on">Added On</string>
+    <string name="torrent_overview_private">Private</string>
+    <string name="torrent_overview_private_yes">Yes</string>
+    <string name="torrent_overview_private_no">No</string>
     <string name="torrent_overview_hash_v1">Hash v1</string>
     <string name="torrent_overview_hash_v2">Hash v2</string>
     <string name="torrent_overview_comment">Comment</string>
@@ -307,7 +322,6 @@
     <string name="torrent_overview_downloaded_format">%1$s (%2$s this session)</string>
     <string name="torrent_overview_uploaded">Uploaded</string>
     <string name="torrent_overview_uploaded_format">%1$s (%2$s this session)</string>
-    <string name="torrent_overview_ratio">Ratio</string>
     <string name="torrent_overview_reannounce_in">Reannounce In</string>
     <string name="torrent_overview_last_activity">Last Activity</string>
     <string name="torrent_overview_last_seen_complete">Last Seen Complete</string>
@@ -438,6 +452,10 @@
     <string name="torrent_add_button_file">File</string>
     <string name="torrent_add_link_hint">Magnet or HTTP Link</string>
     <string name="torrent_add_click_to_select_file">Click to select a file</string>
+    <plurals name="torrent_add_files_selected">
+        <item quantity="one">%1$d file selected</item>
+        <item quantity="other">%1$d files selected</item>
+    </plurals>
     <string name="torrent_add_category">Category</string>
     <string name="torrent_add_tags">Tags</string>
     <string name="torrent_add_start_torrent">Start torrent</string>
@@ -492,16 +510,14 @@
     <string name="rss_action_mark_all_as_read">Mark All as Read</string>
     <string name="rss_action_refresh_all">Refresh All</string>
     <string name="rss_action_refresh">Refresh</string>
+    <string name="rss_action_move_select_folder">Select a folder</string>
 
     <string name="rss_hint_feed_url">Feed URL</string>
     <string name="rss_hint_feed_name_optional">Feed Name (Optional)</string>
     <string name="rss_hint_feed_name">Feed Name</string>
     <string name="rss_hint_folder_name">Folder Name</string>
-    <string name="rss_hint_move_path">Path</string>
 
     <string name="rss_all_articles">All Articles</string>
-    <string name="rss_view_all_articles">View All Articles</string>
-    <string name="rss_view_all_articles_in">View All Articles in %1$s</string>
 
     <string name="rss_field_required">This field is required.</string>
 
@@ -585,6 +601,7 @@
     <string name="search_result_filter_size">Size</string>
     <string name="search_result_filter_min">Min</string>
     <string name="search_result_filter_max">Max</string>
+    <string name="search_result_filter_reset">Reset</string>
 
     <string name="search_result_showing_count">Showing %1$d out of %2$d</string>
     <string name="search_result_size">Size: %1$s</string>
@@ -635,8 +652,6 @@
         <item quantity="one">%1$d second</item>
         <item quantity="other">%1$d seconds</item>
     </plurals>
-    <string name="settings_auto_refresh_hide_loading_bar">Hide loading bar</string>
-    <string name="settings_auto_refresh_hide_loading_bar_description">Don\'t show loading bar when auto refreshing</string>
     <string name="settings_notification_check_interval">Notification check interval</string>
     <plurals name="settings_notification_check_interval_description">
         <item quantity="one">%1$d minute</item>
@@ -647,6 +662,8 @@
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
     <string name="settings_theme_system_default">System Default</string>
+    <string name="settings_language">Language</string>
+    <string name="settings_language_system_default">System Default</string>
 
     <string name="settings_server_title_add">Add Server</string>
     <string name="settings_server_title_edit">Edit Server</string>
@@ -667,6 +684,19 @@
     <string name="settings_server_advanced_basic_auth_enabled">Enabled</string>
     <string name="settings_server_advanced_basic_auth_username">Username</string>
     <string name="settings_server_advanced_basic_auth_password">Password</string>
+    <string name="settings_server_advanced_doh">DNS over HTTPS (DoH)</string>
+    <string name="settings_server_advanced_doh_cloudflare" translatable="false">Cloudflare</string>
+    <string name="settings_server_advanced_doh_google" translatable="false">Google</string>
+    <string name="settings_server_advanced_doh_adguard" translatable="false">AdGuard</string>
+    <string name="settings_server_advanced_doh_quad9" translatable="false">Quad9</string>
+    <string name="settings_server_advanced_doh_alidns" translatable="false">AliDNS</string>
+    <string name="settings_server_advanced_doh_dnspod" translatable="false">DNSPod</string>
+    <string name="settings_server_advanced_doh_360" translatable="false">360</string>
+    <string name="settings_server_advanced_doh_quad101" translatable="false">Quad101</string>
+    <string name="settings_server_advanced_doh_mullvad" translatable="false">Mullvad</string>
+    <string name="settings_server_advanced_doh_controld" translatable="false">ControlD</string>
+    <string name="settings_server_advanced_doh_njalla" translatable="false">Njalla</string>
+    <string name="settings_server_advanced_doh_shecan" translatable="false">Shecan</string>
 
     <string name="settings_server_add_success">Server has been added successfully.</string>
     <string name="settings_server_edit_success">Server has been edited successfully.</string>
@@ -678,10 +708,10 @@
     <string name="settings_server_url_configuration_not_valid">Entered URL configuration is not valid.</string>
     <string name="settings_server_connection_success">Connected to server successfully.</string>
 
-    <string name="about_description">qBitController allows you to control qBittorrent from an Android device.\n\nFor more detailed information and source code: https://github.com/Bartuzen/qBitController</string>
+    <string name="about_description">qBitController allows you to control qBittorrent from an Android device.\n\nFor more detailed information and source code: %1$s</string>
 
     <string name="notification_channel_download_completed">Download completed</string>
-    <string name="notification_torrent_downloaded">has finished downloading.</string>
+    <string name="notification_torrent_downloaded">Torrent downloaded</string>
 
     <string name="accessibility_open_navigation_drawer">Open navigation drawer</string>
     <string name="accessibility_close_navigation_drawer">Close navigation drawer</string>
