@@ -200,6 +200,10 @@ fun TorrentPeersTab(
         viewModel.setScreenActive(isScreenActive)
     }
 
+    LaunchedEffect(selectedPeers.isNotEmpty()) {
+        viewModel.setSelectionMode(selectedPeers.isNotEmpty())
+    }
+
     PlatformBackHandler(enabled = isScreenActive && selectedPeers.isNotEmpty()) {
         selectedPeers.clear()
     }

@@ -40,6 +40,8 @@ class TorrentPeersViewModel(
 
     private val isScreenActive = MutableStateFlow(false)
 
+    private val isSelectionMode = MutableStateFlow(false)
+
     init {
         loadPeers()
 
@@ -48,10 +50,15 @@ class TorrentPeersViewModel(
                 autoRefreshInterval,
                 isNaturalLoading,
                 isScreenActive,
-            ) { autoRefreshInterval, isNaturalLoading, isScreenActive ->
-                Triple(autoRefreshInterval, isNaturalLoading, isScreenActive)
-            }.collectLatest { (autoRefreshInterval, isNaturalLoading, isScreenActive) ->
-                if (isScreenActive && isNaturalLoading == null && autoRefreshInterval != 0) {
+                isSelectionMode,
+            ) { autoRefreshInterval, isNaturalLoading, isScreenActive, isSelectionMode ->
+                Pair(
+                    Triple(autoRefreshInterval, isNaturalLoading, isScreenActive),
+                    isSelectionMode,
+                )
+            }.collectLatest { (state, isSelectionMode) ->
+                val (autoRefreshInterval, isNaturalLoading, isScreenActive) = state
+                if (isScreenActive && isNaturalLoading == null && autoRefreshInterval != 0 && !isSelectionMode) {
                     delay(autoRefreshInterval.seconds)
                     loadPeers(autoRefresh = true)
                 }
@@ -61,6 +68,10 @@ class TorrentPeersViewModel(
 
     fun setScreenActive(isScreenActive: Boolean) {
         this.isScreenActive.value = isScreenActive
+    }
+
+    fun setSelectionMode(isSelected: Boolean) {
+        isSelectionMode.value = isSelected
     }
 
     private fun updatePeers() = viewModelScope.launch {
