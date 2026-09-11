@@ -27,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.seconds
 
 class SearchResultViewModel(
     private val serverId: Int,
@@ -160,7 +161,7 @@ class SearchResultViewModel(
                 Triple(isSearchContinuing, isLoading, isScreenActive)
             }.collectLatest { (isSearchContinuing, isLoading, isScreenActive) ->
                 if (isScreenActive && isSearchContinuing && !isLoading) {
-                    delay(1000)
+                    delay(1.seconds)
                     loadResults()
                 }
             }

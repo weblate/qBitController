@@ -111,7 +111,7 @@ class TorrentPeersViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.PeersAdded)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadPeers()
                 }
             }

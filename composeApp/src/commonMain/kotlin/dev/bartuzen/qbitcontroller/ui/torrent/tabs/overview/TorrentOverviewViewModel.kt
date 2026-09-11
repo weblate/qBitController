@@ -173,7 +173,7 @@ class TorrentOverviewViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentPaused)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadTorrent()
                 }
             }
@@ -188,7 +188,7 @@ class TorrentOverviewViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentResumed)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadTorrent()
                 }
             }
@@ -287,7 +287,7 @@ class TorrentOverviewViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.ForceStartChanged(value))
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadTorrent()
                 }
             }
@@ -302,7 +302,7 @@ class TorrentOverviewViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.SuperSeedingChanged(value))
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadTorrent()
                 }
             }
@@ -317,7 +317,7 @@ class TorrentOverviewViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentRechecked)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadTorrent()
                 }
             }

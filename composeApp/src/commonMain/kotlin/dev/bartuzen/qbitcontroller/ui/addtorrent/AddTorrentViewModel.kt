@@ -32,6 +32,7 @@ import kotlinx.io.files.FileNotFoundException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.math.max
+import kotlin.time.Duration.Companion.milliseconds
 
 class AddTorrentViewModel(
     initialServerId: Int?,
@@ -269,7 +270,7 @@ class AddTorrentViewModel(
 
         searchDirectoriesJob = viewModelScope.launch {
             if (directoryInfo.value != null) {
-                delay(300)
+                delay(300.milliseconds)
             }
 
             val pathDeferred = async {

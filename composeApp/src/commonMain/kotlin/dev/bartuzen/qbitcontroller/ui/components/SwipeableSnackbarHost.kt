@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 fun SwipeableSnackbarHost(
@@ -31,7 +32,7 @@ fun SwipeableSnackbarHost(
         onDismiss = {
             scope.launch {
                 hostState.currentSnackbarData?.dismiss()
-                delay(100)
+                delay(100.milliseconds)
                 dismissSnackbarState.reset()
             }
         },

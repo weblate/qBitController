@@ -107,6 +107,7 @@ import qbitcontroller.composeapp.generated.resources.search_plugins_install_hint
 import qbitcontroller.composeapp.generated.resources.search_plugins_install_success
 import qbitcontroller.composeapp.generated.resources.search_plugins_save_success
 import qbitcontroller.composeapp.generated.resources.search_plugins_update_success
+import kotlin.time.Duration.Companion.seconds
 
 @Composable
 fun SearchPluginsScreen(
@@ -144,7 +145,7 @@ fun SearchPluginsScreen(
                     snackbarHostState.showSnackbar(getString(Res.string.search_plugins_install_success))
                 }
                 scope.launch {
-                    delay(1000)
+                    delay(1.seconds)
                     viewModel.loadPlugins()
                 }
             }
@@ -154,7 +155,7 @@ fun SearchPluginsScreen(
                     snackbarHostState.showSnackbar(getString(Res.string.search_plugins_update_success))
                 }
                 scope.launch {
-                    delay(1000)
+                    delay(1.seconds)
                     viewModel.loadPlugins()
                 }
             }

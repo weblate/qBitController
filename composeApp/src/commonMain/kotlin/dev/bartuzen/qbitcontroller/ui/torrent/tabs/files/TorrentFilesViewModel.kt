@@ -124,7 +124,7 @@ class TorrentFilesViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.FileRenamed)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadFiles()
                 }
             }
@@ -142,7 +142,7 @@ class TorrentFilesViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.FolderRenamed)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadFiles()
                 }
             }

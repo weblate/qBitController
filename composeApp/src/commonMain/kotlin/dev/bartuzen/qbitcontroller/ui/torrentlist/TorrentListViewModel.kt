@@ -560,7 +560,7 @@ class TorrentListViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentsPaused(hashes.size))
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadMainData()
                 }
             }
@@ -576,7 +576,7 @@ class TorrentListViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentsResumed(hashes.size))
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadMainData()
                 }
             }
@@ -618,7 +618,7 @@ class TorrentListViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentsPriorityIncreased)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadMainData()
                 }
             }
@@ -637,7 +637,7 @@ class TorrentListViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentsPriorityDecreased)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadMainData()
                 }
             }
@@ -656,7 +656,7 @@ class TorrentListViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentsPriorityMaximized)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadMainData()
                 }
             }
@@ -675,7 +675,7 @@ class TorrentListViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.TorrentsPriorityMinimized)
                 launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadMainData()
                 }
             }

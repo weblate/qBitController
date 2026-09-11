@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.seconds
 
 class RssFeedsViewModel(
     private val serverId: Int,
@@ -66,7 +67,7 @@ class RssFeedsViewModel(
             is RequestResult.Success -> {
                 eventChannel.send(Event.AllFeedsRefreshed)
                 viewModelScope.launch {
-                    delay(1000)
+                    delay(1.seconds)
                     loadRssFeeds()
                 }
             }

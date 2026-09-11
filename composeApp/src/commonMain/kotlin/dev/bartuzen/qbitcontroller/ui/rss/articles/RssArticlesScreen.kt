@@ -133,6 +133,7 @@ import qbitcontroller.composeapp.generated.resources.rss_new
 import qbitcontroller.composeapp.generated.resources.rss_refresh_feed_success
 import qbitcontroller.composeapp.generated.resources.rss_torrents_selected
 import qbitcontroller.composeapp.generated.resources.torrent_add_success
+import kotlin.time.Duration.Companion.seconds
 
 object RssArticlesKeys {
     const val IsUpdated = "rssArticles.isUpdated"
@@ -239,7 +240,7 @@ fun RssArticlesScreen(
                     snackbarHostState.showSnackbar(getString(Res.string.rss_refresh_feed_success))
                 }
                 scope.launch {
-                    delay(1000)
+                    delay(1.seconds)
                     viewModel.loadRssArticles()
                 }
             }
