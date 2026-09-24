@@ -232,7 +232,7 @@
     <string name="size_bytes">B</string>
     <string name="torrent_list_shutdown_confirm">Sind sie sich sicher, dass die qBittorrent beenden wollen?</string>
     <string name="torrent_list_shutdown_success">qBittorrent wurde erfolgreich heruntergefahren.</string>
-    <string name="stats_connected_peers">Verbundene Teilnehmer</string>
+    <string name="stats_connected_peers">Verbundene Peers</string>
     <string name="stats_read_cache_hits">Lese Cache Treffer</string>
     <string name="stats_average_time_in_queue">Durchschnittliche Wartezeit</string>
     <string name="stats_total_queued_size">Gesamte Warteschlangen-Größe</string>
