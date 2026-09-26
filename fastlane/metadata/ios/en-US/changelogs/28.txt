@@ -1,0 +1,7 @@
+- Added support for qBittorrent 5.2.0
+- Added option to hide server URLs in the sidebar
+- Added option to show downloaded and uploaded amount in torrent list
+- Made download and upload speeds texts different colors to be easier to distinguish
+- Added option to sort by downloaded and uploaded size
+- Added existing folders as suggestions for download path when adding a torrent
+- Bug fixes
